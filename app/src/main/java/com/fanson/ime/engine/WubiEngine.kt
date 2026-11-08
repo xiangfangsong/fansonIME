@@ -22,6 +22,16 @@ interface InputEngine {
     fun punctuation(text: String): EngineResult
 }
 
+enum class WubiEnterAction(val value: String, val label: String, val noMatchHint: String) {
+    COMMIT_CODE("commit_code", "上屏五笔编码", "无匹配，退格修正 / 回车上屏编码"),
+    CLEAR_CODE("clear_code", "清除五笔编码", "无匹配，退格修正 / 回车清除编码"),
+    FIRST_CANDIDATE("first_candidate", "上屏首个候选", "无匹配，请退格修正");
+
+    companion object {
+        fun fromPreference(value: String): WubiEnterAction = entries.firstOrNull { it.value == value } ?: COMMIT_CODE
+    }
+}
+
 /** A deterministic four-code table engine. Confined to one input worker. */
 class WubiEngine(private val lexicon: Lexicon, private val converter: TraditionalConverter? = null) : InputEngine {
     override var code: String = ""
@@ -30,6 +40,7 @@ class WubiEngine(private val lexicon: Lexicon, private val converter: Traditiona
         private set
     var autoCommitUnique = true
     var commitOnFifth = true
+    var enterAction = WubiEnterAction.COMMIT_CODE
     var traditionalMode = false
         set(value) { if (field != value) { field = value; refresh() } }
 
@@ -65,19 +76,26 @@ class WubiEngine(private val lexicon: Lexicon, private val converter: Traditiona
 
     override fun space(): EngineResult = when {
         code.isEmpty() -> EngineResult(listOf(" "))
-        candidates.isEmpty() -> EngineResult(hint = "无匹配，请修正；回车可提交原始字母")
+        candidates.isEmpty() -> EngineResult(hint = enterAction.noMatchHint)
         else -> select(0)
     }
 
     /** Resolves preedit before switching a panel; does not invent a space. */
     override fun resolve(): EngineResult = when {
         code.isEmpty() -> EngineResult()
-        candidates.isEmpty() -> EngineResult(hint = "请先修正编码，或按回车提交原始字母")
+        candidates.isEmpty() -> EngineResult(hint = enterAction.noMatchHint)
         else -> select(0)
     }
 
-    override fun enter(): EngineResult {
+    override fun enter(): EngineResult = enter(enterAction)
+
+    fun enter(action: WubiEnterAction): EngineResult {
         if (code.isEmpty()) return EngineResult()
+        when (action) {
+            WubiEnterAction.CLEAR_CODE -> { reset(); return EngineResult() }
+            WubiEnterAction.FIRST_CANDIDATE -> return if (candidates.isEmpty()) EngineResult(hint = action.noMatchHint) else select(0)
+            WubiEnterAction.COMMIT_CODE -> Unit
+        }
         val raw = code
         reset()
         return EngineResult(listOf(raw))

@@ -92,6 +92,69 @@ class WubiEngineTest {
         assertEquals("", e.code)
         assertTrue(e.candidates.isEmpty())
     }
+    @Test fun returnCanClearMatchedAndUnmatchedCodesWithoutCommitting() {
+        val e = engine("a" to "工").apply { enterAction = WubiEnterAction.CLEAR_CODE }
+        for (code in listOf("a", "abcd")) {
+            type(e, code)
+            assertTrue(e.enter().commits.isEmpty())
+            assertEquals("", e.code)
+            assertTrue(e.candidates.isEmpty())
+        }
+    }
+    @Test fun returnCanSelectFirstCandidateAndResetCode() {
+        val e = engine("aaaa" to "甲", "aaaa" to "乙").apply { enterAction = WubiEnterAction.FIRST_CANDIDATE }
+        type(e, "aaaa")
+        assertEquals(listOf("甲"), e.enter().commits)
+        assertEquals("", e.code)
+        assertTrue(e.candidates.isEmpty())
+    }
+    @Test fun firstCandidateReturnPreservesMissingCodeForCorrection() {
+        val e = engine("a" to "工").apply { enterAction = WubiEnterAction.FIRST_CANDIDATE }
+        type(e, "ab")
+        val result = e.enter()
+        assertTrue(result.commits.isEmpty())
+        assertNotNull(result.hint)
+        assertEquals("ab", e.code)
+        e.backspace()
+        assertEquals(listOf("工"), e.enter().commits)
+    }
+    @Test fun firstCandidateReturnSupportsPrefixCompletions() {
+        val e = WubiEngine(object : Lexicon {
+            override fun lookup(code: String) = listOf(Candidate("补全", "abcd", false))
+        }).apply { enterAction = WubiEnterAction.FIRST_CANDIDATE }
+        e.letter('a')
+        assertEquals(listOf("补全"), e.enter().commits)
+        assertEquals("", e.code)
+    }
+    @Test fun allReturnActionsAreNoOpsWithoutCode() {
+        val e = engine()
+        for (action in WubiEnterAction.entries) {
+            e.enterAction = action
+            assertEquals(EngineResult(), e.enter())
+        }
+    }
+    @Test fun explicitRawCodeSubmissionStillWorksWithOtherReturnSettings() {
+        val e = engine("a" to "工")
+        for (action in WubiEnterAction.entries) {
+            e.enterAction = action
+            e.letter('a')
+            assertEquals(listOf("a"), e.enter(WubiEnterAction.COMMIT_CODE).commits)
+        }
+    }
+    @Test fun noMatchGuidanceFollowsReturnSetting() {
+        val e = engine()
+        e.letter('a')
+        for (action in WubiEnterAction.entries) {
+            e.enterAction = action
+            assertEquals(action.noMatchHint, e.space().hint)
+            assertEquals(action.noMatchHint, e.resolve().hint)
+        }
+    }
+    @Test fun returnPreferenceDefaultsAndRoundTrips() {
+        assertEquals(WubiEnterAction.COMMIT_CODE, WubiEnterAction.fromPreference(""))
+        assertEquals(WubiEnterAction.COMMIT_CODE, WubiEnterAction.fromPreference("unknown"))
+        for (action in WubiEnterAction.entries) assertEquals(action, WubiEnterAction.fromPreference(action.value))
+    }
     @Test fun resetCannotCarryTextIntoAnotherSession() {
         val e = engine("a" to "工")
         e.letter('a'); e.reset()

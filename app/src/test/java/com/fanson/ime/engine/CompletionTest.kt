@@ -39,6 +39,12 @@ class CompletionTest {
         type(e, "vntc"); assertEquals(listOf("發"), e.letter('a').commits); assertEquals("a", e.code)
     }
     @Test fun traditionalEnterKeepsRawLetters() { val e = wubi(); e.traditionalMode = true; e.letter('v'); assertEquals(listOf("v"), e.enter().commits) }
+    @Test fun traditionalEnterCanSelectFirstConvertedCandidate() {
+        val e = wubi().apply { traditionalMode = true; enterAction = WubiEnterAction.FIRST_CANDIDATE }
+        e.letter('v')
+        assertEquals(listOf("發"), e.enter().commits)
+        assertTrue(e.code.isEmpty() && e.candidates.isEmpty())
+    }
     @Test fun englishPrefixAndExactPriority() {
         val e = english(); type(e, "app")
         assertEquals(listOf("app", "application", "apple", "apply"), e.candidates.map { it.text })

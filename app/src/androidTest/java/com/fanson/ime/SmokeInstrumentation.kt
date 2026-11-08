@@ -21,6 +21,7 @@ import com.fanson.ime.engine.Candidate
 import com.fanson.ime.engine.TraditionalConverter
 import com.fanson.ime.engine.EnglishLexicon
 import com.fanson.ime.engine.WubiEngine
+import com.fanson.ime.engine.WubiEnterAction
 import com.fanson.ime.keyboard.CandidateStrip
 import com.fanson.ime.keyboard.EmojiCategoryStrip
 import com.fanson.ime.keyboard.Palette
@@ -38,6 +39,7 @@ class SmokeInstrumentation : Instrumentation() {
     override fun onStart() {
         try {
             val store = LocalStore(targetContext)
+            store.put("wubi_enter_action", "commit_code")
             WubiRepository(targetContext, store).use { repository ->
                 check(repository.lookup("a").first().text == "工")
                 check(repository.lookup("r").first().text == "的")
@@ -146,6 +148,14 @@ class SmokeInstrumentation : Instrumentation() {
             check(inputMethod.subtypeCount == 0)
             passed += "input_method_name_without_subtype"
             val editor = allViews(activity.window.decorView).filterIsInstance<EditText>().first()
+            runOnMainSync {
+                check(editor.gravity == android.view.Gravity.TOP or android.view.Gravity.START)
+                check(editor.inputType and android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0)
+            }
+            passed += "local_trial_multiline_top_start_alignment"
+            val enterSpinner = allViews(activity.window.decorView).filterIsInstance<android.widget.Spinner>().first { it.contentDescription == "回车键功能" }
+            runOnMainSync { check((0 until enterSpinner.count).map { enterSpinner.getItemAtPosition(it).toString() } == listOf("上屏五笔编码", "清除五笔编码", "上屏首个候选")) }
+            screenshot("18-local-trial-settings")
             runOnMainSync { editor.requestFocus() }
             await {
                 var focused = false
@@ -191,6 +201,33 @@ class SmokeInstrumentation : Instrumentation() {
             click("换行"); await { editor.text.toString() == "a" }
             click("换行"); await { editor.text.toString() == "a\n" }
             passed += "return_raw_code_then_newline_ui"
+            fun setEnterAction(action: WubiEnterAction) {
+                runOnMainSync { enterSpinner.setSelection(WubiEnterAction.entries.indexOf(action)) }
+                await { LocalStore(targetContext).use { it.get("wubi_enter_action", "") == action.value } }
+                runOnMainSync { manager.hideSoftInputFromWindow(editor.windowToken, 0) }
+                await { findButton("剪贴板") == null }
+                runOnMainSync { manager.restartInput(editor); manager.showSoftInput(editor, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
+                await { findButton("剪贴板") != null && findText("五笔86 · 本地运行") != null }
+            }
+            setEnterAction(WubiEnterAction.CLEAR_CODE)
+            click("a"); await { findText("编码：a") != null }
+            click("换行"); await { findText("五笔86 · 本地运行") != null }
+            runOnMainSync { check(editor.text.toString() == "a\n") }
+            click("换行"); await { editor.text.toString() == "a\n\n" }
+            passed += "return_clear_code_preserves_editor_then_newline_ui"
+            setEnterAction(WubiEnterAction.FIRST_CANDIDATE)
+            click("a"); await { findText("编码：a") != null }
+            click("换行"); await { editor.text.toString() == "a\n\n工" }
+            val missingCode = LocalStore(targetContext).use { personal -> WubiRepository(targetContext, personal).use { repository ->
+                listOf("yyyy", "abcd", "qwer", "yxyx", "xxyy").first { repository.lookup(it).isEmpty() }
+            } }
+            missingCode.forEach { click(it.toString()) }
+            await { findText("无匹配，请退格修正") != null }
+            click("换行"); await { findText("无匹配，请退格修正") != null }
+            runOnMainSync { check(editor.text.toString() == "a\n\n工") }
+            click("⌫"); await { findText("编码：${missingCode.dropLast(1)}") != null }
+            passed += "return_first_candidate_and_missing_code_correction_ui"
+            setEnterAction(WubiEnterAction.COMMIT_CODE)
             runOnMainSync { editor.setText("") }
             click("切换大小写"); await { findButton("ABC") != null }
             click("a"); await { editor.text.toString() == "A" }

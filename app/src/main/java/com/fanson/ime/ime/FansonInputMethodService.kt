@@ -22,6 +22,7 @@ import com.fanson.ime.emoji.EmojiRepository
 import com.fanson.ime.engine.Candidate
 import com.fanson.ime.engine.EngineResult
 import com.fanson.ime.engine.WubiEngine
+import com.fanson.ime.engine.WubiEnterAction
 import com.fanson.ime.engine.InputEngine
 import com.fanson.ime.engine.EnglishEngine
 import com.fanson.ime.engine.EnglishLexicon
@@ -66,6 +67,7 @@ class FansonInputMethodService : InputMethodService() {
     private var keyHeight = 48
     private var haptics = false
     private var showRootHints = false
+    private var wubiEnterAction = WubiEnterAction.COMMIT_CODE
     private var panel = "keyboard"
     private var expanded = false
     private var emojiSearching = false
@@ -143,7 +145,9 @@ class FansonInputMethodService : InputMethodService() {
         ui = Ui(this, Palette.of(this, store.get("theme", "system")))
         val auto = store.get("auto_unique", "true").toBoolean()
         val fifth = store.get("fifth_commit", "true").toBoolean()
-        worker.execute { engine?.let { it.autoCommitUnique = auto; it.commitOnFifth = fifth } }
+        val enterAction = WubiEnterAction.fromPreference(store.get("wubi_enter_action", "commit_code"))
+        wubiEnterAction = enterAction
+        worker.execute { engine?.let { it.autoCommitUnique = auto; it.commitOnFifth = fifth; it.enterAction = enterAction } }
     }
 
     private fun invalidateSession() {
@@ -281,9 +285,15 @@ class FansonInputMethodService : InputMethodService() {
         inputTask(wubi, token) { e ->
             val hadCode = e.code.isNotEmpty()
             val result = e.enter()
+            val code = e.code
+            val candidates = e.candidates.toList()
             publishInput(wubi, token) {
                 result.commits.forEach { if (search) emojiQuery += it else commitText(it) }
-                currentCode = ""; candidateSnapshot = emptyList(); renderCandidates()
+                currentCode = code; candidateSnapshot = candidates
+                val wasExpanded = expanded
+                expanded = false; renderCandidates()
+                result.hint?.let { hint(it) }
+                if (wasExpanded) renderBody()
                 if (search) { emojiPage = 0; renderBody() }
                 else if (!hadCode) {
                     val info = currentInputEditorInfo
@@ -360,7 +370,7 @@ class FansonInputMethodService : InputMethodService() {
             else -> "${if (chinese) "五笔86" else if (uppercase) "英文大写" else "英文小写"} · 本地运行"
         }
         val row = candidateRow ?: return
-        row.submit(candidateSnapshot, expanded, if (currentCode.isEmpty()) "" else "无匹配，退格修正 / 回车提交字母")
+        row.submit(candidateSnapshot, expanded, if (currentCode.isEmpty()) "" else if (chinese) wubiEnterAction.noMatchHint else "无匹配，回车提交字母")
     }
 
     private fun setCandidatesExpanded(value: Boolean) {
@@ -402,7 +412,7 @@ class FansonInputMethodService : InputMethodService() {
     private fun shift() {
         vibrate()
         if (chinese) {
-            enqueue({ it.enter() }, after = { chinese = false; uppercase = true; render() })
+            enqueue({ if (it is WubiEngine) it.enter(WubiEnterAction.COMMIT_CODE) else it.enter() }, after = { chinese = false; uppercase = true; render() })
         } else {
             uppercase = !uppercase
             render()

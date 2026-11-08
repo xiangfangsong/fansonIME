@@ -6,11 +6,13 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import com.fanson.ime.data.LocalStore
+import com.fanson.ime.engine.WubiEnterAction
 import com.fanson.ime.R
 import com.fanson.ime.keyboard.Palette
 import com.fanson.ime.keyboard.Ui
@@ -55,6 +57,7 @@ class MainActivity : Activity() {
             hint = "点这里试试五笔、emoji 和剪贴板"
             textSize = 17f; setTextColor(ui.palette.ink); setHintTextColor(ui.palette.muted)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            gravity = Gravity.TOP or Gravity.START
             minLines = 3; maxLines = 6; setPadding(dp(12), dp(8), dp(12), dp(8))
             background = ui.round(ui.palette.key, border = true)
             isSaveEnabled = false
@@ -64,6 +67,22 @@ class MainActivity : Activity() {
         section("输入习惯")
         toggle("四码唯一自动上屏", "auto_unique", true)
         toggle("第五码提交首选并开始新编码", "fifth_commit", true)
+        val enterRow = ui.row()
+        enterRow.addView(ui.text("回车键功能"), LinearLayout.LayoutParams(0, dp(48), 1f))
+        val enterActions = WubiEnterAction.entries
+        val enterSpinner = Spinner(this).apply {
+            contentDescription = "回车键功能"
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, enterActions.map { it.label })
+            setSelection(enterActions.indexOf(WubiEnterAction.fromPreference(store.get("wubi_enter_action", "commit_code"))))
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    store.put("wubi_enter_action", enterActions[position].value)
+                }
+            }
+        }
+        enterRow.addView(enterSpinner); page.addView(enterRow)
+        page.addView(ui.text("有五笔编码时生效；无编码时仍按输入框要求换行或执行发送等操作。首个候选无匹配时保留编码。", 13f, ui.palette.muted))
         toggle("按键轻震动", "haptic", false)
         toggle("字母键显示字根提示", "roots", false)
         section("键盘外观")
@@ -104,7 +123,7 @@ class MainActivity : Activity() {
         }
         page.addView(clear, LinearLayout.LayoutParams(-1, dp(48)))
         section("关于")
-        page.addView(ui.text("放松输入法 0.1.6 · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0", 13f, ui.palette.muted))
+        page.addView(ui.text("放松输入法 0.1.7 · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0", 13f, ui.palette.muted))
         page.addView(ui.button("第三方数据与许可") { showLicenses() }, LinearLayout.LayoutParams(-1, dp(48)))
         refreshStatus()
     }
