@@ -1,0 +1,15 @@
+五笔86完整字根卡片
+
+字根键位事实参考 riku-ri/wubi-kb：
+https://github.com/riku-ri/wubi-kb
+固定 revision：c65590f6a524fa7cb9459d2095be87d22bd839fc
+逐键来源及校验值保存在 wubi_roots.json。卡片包括该表的基本字根及变形字根。
+
+字根字形来自 UMingCN-wubi-86-kb.ttf：
+https://github.com/riku-ri/wubi-kb/releases/tag/font
+原始 SHA-256：4b9d2a7a2473ff39e097565e8906875fbe1097deac7e0891c0b150244d71223a
+原始字体作者和版权见 FONT-COPYRIGHT.txt，上游字形修改声明见 UPSTREAM-FONT-CHANGES.adoc。
+
+fansonIME 于 2026-11-08 仅保留字根所需字形并重命名为 Fanson Wubi Roots，未更改字形轮廓。修改声明也写入字体 name 表。派生字体按 ARPHIC PUBLIC LICENSE 提供，可自由复制、修改与再分发；不提供担保，完整许可见 ARPHICPL.TXT。字体文件 fonts/fanson_wubi_roots.ttf 随 APK 分发，项目提供 keys.json 与 prepare_root_data.py 以供重建。
+
+字根字体只用于卡片展示，不用于输入正文；查看卡片不提交任何编码或文字。

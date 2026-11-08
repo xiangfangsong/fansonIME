@@ -22,6 +22,11 @@ lock = json.loads((ROOT / 'resources.lock.json').read_text(encoding='utf-8'))
 for name, entry in lock['sources'].items():
     assert hashlib.sha256((ROOT / 'third_party' / name).read_bytes()).hexdigest() == entry['sha256'], name
 words = (ASSETS / 'english.txt').read_text(encoding='utf-8').splitlines()
+roots = json.loads((ASSETS / 'wubi_roots.json').read_text(encoding='utf-8'))
+assert set(roots['keys']) == set('abcdefghijklmnopqrstuvwxy')
+assert all(roots['keys'][key] for key in roots['keys'])
+assert sum(map(len, roots['keys'].values())) == info['wubi_root_forms'] == 258
+assert (ASSETS / 'fonts/fanson_wubi_roots.ttf').stat().st_size < 200000
 assert len(words) == info['english_words'] and len(set(words)) == len(words)
 assert all(word.isascii() and word.isalpha() and word.islower() for word in words)
 assert {'apple', 'application', 'apply'} <= set(words)

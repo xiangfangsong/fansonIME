@@ -5,14 +5,18 @@
     "rime/rime-wubi": "152a0d3f3efe40cae216d1e3b338242446848d07",
     "unicode-org/cldr": "e1d37acce5dae468c414172be53b666d58d45be8",
     "BYVoid/OpenCC": "556ed22496d650bd0b13b6c163be9814637970ae",
-    "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6"
+    "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6",
+    "riku-ri/wubi-kb": "c65590f6a524fa7cb9459d2095be87d22bd839fc"
   },
   "assets": {
     "wubi86.db": "a42d340cb0e456ba96a348606778da443743abee13b536f80cd19af827925894",
     "emoji.json": "fe89ec8a404f80d8ba56df6b723db89aeddddea4aa6fcdf338b6a624ef6058cc",
     "traditional.tsv": "8e128e24cc56ae9bd1b72f1d43efd31a7128837e7c4a4c4fecb2ee92d9438147",
-    "english.txt": "b4944ce250fb8e217308cb12cd840be1d519b437d08e2482cfa7989c80de532d"
+    "english.txt": "b4944ce250fb8e217308cb12cd840be1d519b437d08e2482cfa7989c80de532d",
+    "fonts/fanson_wubi_roots.ttf": "8372f52d9af1b6a7a5d84e839a101280f02087062b366397d209570f475f7305",
+    "wubi_roots.json": "97326c0bca3ee7669d3f30315b366a639280ad1b6c0e5e474841a224f33a4905"
   },
   "traditional_mappings": 53076,
-  "english_words": 46717
+  "english_words": 46717,
+  "wubi_root_forms": 258
 }

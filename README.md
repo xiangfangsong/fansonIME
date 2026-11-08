@@ -1,8 +1,8 @@
 # 放松输入法 · fansonIME
 
-个人使用的 Android 12+ 离线输入法，目前以五笔86为主。当前开发版本为 **0.1.7 Debug**，不申请网络权限；未来可加入偶尔使用的离线拼音，本次未实现。
+个人使用的 Android 12+ 离线输入法，目前以五笔86为主。当前开发版本为 **0.1.8 Debug**，不申请网络权限；未来可加入偶尔使用的离线拼音，本次未实现。
 
-0.1.7 回车键设置与试打框对齐已通过用户真机验收。
+0.1.8 顶部数字行、完整字根卡片和反查预留图标已通过用户真机验收。
 
 ## 首版功能
 
@@ -12,7 +12,9 @@
 - 候选固定单行且不可横向滚动；中文和英文的可见候选都可直接点击上屏。只有一行放不下时出现向下箭头，点击箭头才展开；一行全部放得下时不显示箭头。
 - 编码提示和候选仅在主键盘输入时显示；剪贴板、emoji 浏览、符号和数字页隐藏并移除占位。Emoji 五笔搜索调出输入键盘时保留候选选字。
 - 空格选词；“输入习惯”可设置回车为“上屏五笔编码”（默认）、“清除五笔编码”或“上屏首个候选”。首个候选无匹配时保留编码，无编码时执行输入框的换行或发送等动作。四码唯一自动上屏、可选第五码顶字、无匹配纠错。
-- Shift 从五笔86直接进入英文大写，再按切换英文小写，左上角模式按钮返回五笔86；数字、符号、编辑动作、长按字母首行输入数字、长按空格打开光标控制。
+- 中文和英文主键盘均有默认开启的顶部数字行（1～9、0），可在设置关闭。Shift 从五笔86进入英文大写，再按切换小写，左上角按钮返回五笔86；数字、符号、编辑动作、长按空格打开光标控制。
+- 开启“字母键显示字根提示”后，五笔字母键保留简要字根，长按显示该键完整字根卡片；关闭后不响应长按查字根。内置专用字形覆盖 25 键、258 个基本及变形字根，查看不提交文字；移除首行长按输入数字。
+- 五笔 Z 键使用“音＋放大镜”图标预留拼音反查，本版暂未开放；英文模式正常输入 Z/z。
 - 主工具栏采用本地矢量图标；收起小三角在设置右侧，删除键盘底部“切换输入法”和“收起”工具行，换行用回折箭头显示。系统输入法选择页仅注册“放松输入法”，不另列五笔86子类型。
 - Unicode 16.0 emoji：分类、中文关键词五笔搜索、肤色变体直接选择、按设备字形能力过滤；移除收藏和长按弹层。
 - Emoji 常用按本地使用次数排序，最多 30 项且只有一页；同次数按最近顺序排序，无记录时默认补位。当前网格不在点击后立即重排，重新进入常用时刷新。
@@ -92,7 +94,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_emulator.ps1 -Ser
 
 见 [CHANGELOG.md](docs/CHANGELOG.md) 与 [VALIDATION.md](docs/VALIDATION.md)。目前尚未包含拼音、拼音反查、自动调频、图片/GIF 表情包和词库导入导出。后续版本以真机反馈逐项推进。
 
-0.1.7 新增回车键设置并调整试打框对齐，内部构建编号 10；功能通过 71 项单元测试、57 项模拟器检查和零问题 Lint，已获用户真机验收。验收后按用户要求将源码和文档版本统一为 0.1.7，不再编译测试；现有已验收 APK 仍为标识 0.1.6 的 `dist/fansonIME-0.1.6-debug.apk`，尚未生成标识 0.1.7 的 APK。最新记录见 [VALIDATION-0.1.7.md](docs/VALIDATION-0.1.7.md)，旧版记录保留在对应版本的验证文档中。
+0.1.8 新增顶部数字行、完整字根卡片和拼音反查预留图标，内部构建编号 11；通过 71 项单元测试、61 项模拟器检查和零问题 Lint。提前告知后已覆盖安装真机，用户已确认验收通过并授权提交 Git。Debug APK 为 `dist/fansonIME-0.1.8-debug.apk`；最新记录见 [VALIDATION-0.1.8.md](docs/VALIDATION-0.1.8.md)，旧版记录保留在对应版本的验证文档中。
 
 界面截图：[五笔候选](docs/screenshots/02-wubi-candidates.png)、[emoji 搜索](docs/screenshots/03-emoji-search.png)、[剪贴板](docs/screenshots/04-clipboard.png)。
 
@@ -107,5 +109,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_emulator.ps1 -Ser
 0.1.5：[表情页隐藏候选区](docs/screenshots/14-emoji-no-candidates-0.1.5.png)、[剪贴板页隐藏候选区](docs/screenshots/15-clipboard-no-candidates-0.1.5.png)、[符号页隐藏候选区](docs/screenshots/16-symbols-no-candidates-0.1.5.png)。
 
 0.1.6：[繁体歧义候选](docs/screenshots/17-traditional-variants-0.1.6.png)、[英文前缀补全](docs/screenshots/18-english-completion-0.1.6.png)、[Aa 自动拼写开关](docs/screenshots/19-english-spelling-key-0.1.6.png)。
+
+0.1.8：[Q 键完整字根](docs/screenshots/20-wubi-root-card-q-0.1.8.png)、[N 键完整字根](docs/screenshots/21-wubi-root-card-n-0.1.8.png)、[数字行与反查图标](docs/screenshots/22-number-row-0.1.8.png)。
 
 设计原稿见 [DESIGN.md](docs/DESIGN.md)。实现选择：设置以小型 SQLite 表代替设计草案的 DataStore，避免增加运行时依赖；所有用户数据仍保存在无备份私有目录。

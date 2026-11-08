@@ -40,6 +40,8 @@ class SmokeInstrumentation : Instrumentation() {
         try {
             val store = LocalStore(targetContext)
             store.put("wubi_enter_action", "commit_code")
+            store.put("number_row", "true")
+            store.put("roots", "false")
             WubiRepository(targetContext, store).use { repository ->
                 check(repository.lookup("a").first().text == "工")
                 check(repository.lookup("r").first().text == "的")
@@ -197,6 +199,95 @@ class SmokeInstrumentation : Instrumentation() {
             }
             passed += "vector_toolbar_enter_hide_layout"
             await { findText("五笔86 · 本地运行") != null }
+            fun refreshKeyboard() {
+                runOnMainSync { manager.hideSoftInputFromWindow(editor.windowToken, 0) }
+                await { findButton("剪贴板") == null }
+                runOnMainSync { manager.restartInput(editor); manager.showSoftInput(editor, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
+                await { findButton("剪贴板") != null && findText("五笔86 · 本地运行") != null }
+            }
+            fun setToggle(label: String, checked: Boolean) {
+                runOnMainSync { allViews(activity.window.decorView).filterIsInstance<android.widget.Switch>().first { it.text.toString() == label }.isChecked = checked }
+                waitForIdleSync()
+                refreshKeyboard()
+            }
+            fun checkNumberRow(shown: Boolean) {
+                runOnMainSync {
+                    val rows = windows().filterIsInstance<android.widget.LinearLayout>().filter { visible(it) && it.contentDescription == "数字行" }
+                    check(rows.size == if (shown) 1 else 0)
+                    if (shown) check((0 until rows.single().childCount).map { (rows.single().getChildAt(it) as Button).text.toString() } == "1234567890".map { it.toString() })
+                }
+            }
+            checkNumberRow(true)
+            "1234567890".forEach { click(it.toString()) }
+            await { editor.text.toString() == "1234567890" }
+            runOnMainSync { "qwertyuiop".forEach { check(!findKeyboardButton(it).isLongClickable) } }
+            passed += "number_row_default_order_wubi_input_and_removed_long_press_digits"
+            click("五笔86"); await { findButton("abc") != null }
+            checkNumberRow(true)
+            "1234567890".forEach { click(it.toString()) }
+            click("z"); click("换行")
+            await { editor.text.toString() == "12345678901234567890z" }
+            click("abc"); await { findButton("五笔86") != null }
+            runOnMainSync { editor.setText("") }
+            setToggle("显示顶部数字行", false)
+            checkNumberRow(false)
+            LocalStore(targetContext).use { check(it.get("number_row", "true") == "false") }
+            click("五笔86"); await { findButton("abc") != null }; checkNumberRow(false)
+            click("abc"); await { findButton("五笔86") != null }
+            setToggle("显示顶部数字行", true)
+            checkNumberRow(true)
+            passed += "number_row_setting_persists_both_modes"
+            setToggle("字母键显示字根提示", true)
+            click("a"); await { findText("编码：a") != null }
+            runOnMainSync { check(findKeyboardButton('q').performLongClick()) }
+            await { findText("Q 键 · 五笔86字根") != null }
+            runOnMainSync {
+                val grid = windows().filterIsInstance<android.widget.GridLayout>().first { visible(it) && it.contentDescription == "完整字根网格" }
+                check(grid.childCount == 15)
+                check(editor.text.isEmpty())
+                val card = windows().first { visible(it) && it.contentDescription == "Q 键完整字根" }
+                val cardLocation = IntArray(2).also { card.getLocationOnScreen(it) }
+                val keyLocation = IntArray(2).also { findKeyboardButton('q').getLocationOnScreen(it) }
+                check(cardLocation[1] + card.height <= keyLocation[1]) { "Root card must appear above the pressed key" }
+            }
+            screenshot("19-q-full-roots")
+            click("关闭字根卡片")
+            await { findText("Q 键 · 五笔86字根") == null }
+            await { findText("编码：a") != null }
+            click("换行"); await { editor.text.toString() == "a" }
+            var rootX = 0f; var rootY = 0f
+            runOnMainSync {
+                val key = findKeyboardButton('n')
+                val location = IntArray(2).also { key.getLocationOnScreen(it) }
+                rootX = location[0] + key.width / 2f; rootY = location[1] + key.height / 2f
+            }
+            val rootTouchTime = SystemClock.uptimeMillis()
+            sendPointerSync(android.view.MotionEvent.obtain(rootTouchTime, rootTouchTime, android.view.MotionEvent.ACTION_DOWN, rootX, rootY, 0))
+            SystemClock.sleep(android.view.ViewConfiguration.getLongPressTimeout().toLong() + 150)
+            sendPointerSync(android.view.MotionEvent.obtain(rootTouchTime, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_UP, rootX, rootY, 0))
+            await { findText("N 键 · 五笔86字根") != null }
+            runOnMainSync {
+                check(windows().filterIsInstance<android.widget.GridLayout>().first { visible(it) && it.contentDescription == "完整字根网格" }.childCount == 24)
+                check(editor.text.toString() == "a")
+            }
+            screenshot("20-n-full-roots")
+            click("1"); await { findText("N 键 · 五笔86字根") == null && editor.text.toString() == "a1" }
+            passed += "root_cards_complete_shapes_no_input_preserve_code_close_on_typing"
+            click("五笔86"); await { findButton("abc") != null }
+            runOnMainSync { check(!findKeyboardButton('q').isLongClickable) }
+            click("abc"); await { findButton("五笔86") != null }
+            setToggle("字母键显示字根提示", false)
+            runOnMainSync { check(!findKeyboardButton('q').isLongClickable) }
+            click("拼音反查（暂未开放）")
+            await { findText("拼音反查暂未开放") != null }
+            runOnMainSync {
+                val lookup = windows().filterIsInstance<Button>().first { visible(it) && it.contentDescription == "拼音反查（暂未开放）" }
+                check(lookup.text.isEmpty() && lookup.foreground != null)
+                check(editor.text.toString() == "a1")
+            }
+            passed += "root_switch_gates_long_press_and_wubi_lookup_icon_keeps_english_z"
+            runOnMainSync { editor.setText("") }
+            refreshKeyboard()
             click("a"); await { findText("编码：a") != null }
             click("换行"); await { editor.text.toString() == "a" }
             click("换行"); await { editor.text.toString() == "a\n" }
@@ -204,10 +295,7 @@ class SmokeInstrumentation : Instrumentation() {
             fun setEnterAction(action: WubiEnterAction) {
                 runOnMainSync { enterSpinner.setSelection(WubiEnterAction.entries.indexOf(action)) }
                 await { LocalStore(targetContext).use { it.get("wubi_enter_action", "") == action.value } }
-                runOnMainSync { manager.hideSoftInputFromWindow(editor.windowToken, 0) }
-                await { findButton("剪贴板") == null }
-                runOnMainSync { manager.restartInput(editor); manager.showSoftInput(editor, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
-                await { findButton("剪贴板") != null && findText("五笔86 · 本地运行") != null }
+                refreshKeyboard()
             }
             setEnterAction(WubiEnterAction.CLEAR_CODE)
             click("a"); await { findText("编码：a") != null }
@@ -633,6 +721,8 @@ class SmokeInstrumentation : Instrumentation() {
         runOnMainSync { found = windows().filterIsInstance<Button>().firstOrNull { (it.text.toString() == label || it.contentDescription?.toString() == label) && visible(it) } }
         return found
     }
+    // Called only from runOnMainSync; avoid nesting the instrumentation main-thread helper.
+    private fun findKeyboardButton(char: Char): Button = windows().filterIsInstance<Button>().first { visible(it) && it.contentDescription == char.toString() }
     private fun findText(text: String): TextView? {
         var found: TextView? = null
         runOnMainSync { found = windows().filterIsInstance<TextView>().firstOrNull { it.text.toString() == text && visible(it) } }

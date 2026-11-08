@@ -31,6 +31,7 @@ import com.fanson.ime.keyboard.Palette
 import com.fanson.ime.keyboard.CandidateStrip
 import com.fanson.ime.keyboard.EmojiCategoryStrip
 import com.fanson.ime.keyboard.SymbolPanel
+import com.fanson.ime.keyboard.WubiRootCard
 import com.fanson.ime.keyboard.Ui
 import com.fanson.ime.keyboard.dp
 import com.fanson.ime.settings.MainActivity
@@ -67,6 +68,8 @@ class FansonInputMethodService : InputMethodService() {
     private var keyHeight = 48
     private var haptics = false
     private var showRootHints = false
+    private var showNumberRow = true
+    private var rootCard: WubiRootCard? = null
     private var wubiEnterAction = WubiEnterAction.COMMIT_CODE
     private var panel = "keyboard"
     private var expanded = false
@@ -141,6 +144,8 @@ class FansonInputMethodService : InputMethodService() {
         keyHeight = (store.get("key_height", "48").toIntOrNull() ?: 48).coerceIn(40, 64)
         haptics = store.get("haptic", "false").toBoolean()
         showRootHints = store.get("roots", "false").toBoolean()
+        showNumberRow = store.get("number_row", "true").toBoolean()
+        rootCard?.dismiss(); rootCard = null
         if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) keyHeight = minOf(keyHeight, 40)
         ui = Ui(this, Palette.of(this, store.get("theme", "system")))
         val auto = store.get("auto_unique", "true").toBoolean()
@@ -151,6 +156,7 @@ class FansonInputMethodService : InputMethodService() {
     }
 
     private fun invalidateSession() {
+        rootCard?.dismiss()
         session.incrementAndGet()
         releaseClip()
         cancelRepeat()
@@ -221,13 +227,15 @@ class FansonInputMethodService : InputMethodService() {
         return try { connection.commitText(text, 1) } finally { connection.endBatchEdit() }
     }
     private fun letter(char: Char) {
+        rootCard?.dismiss()
         vibrate()
         val typed = if (!chinese && uppercase) char.uppercaseChar() else char
         enqueue({ it.letter(typed) })
     }
-    private fun punct(text: String) { vibrate(); enqueue({ it.punctuation(text) }) }
-    private fun space() { vibrate(); enqueue({ it.space() }) }
+    private fun punct(text: String) { rootCard?.dismiss(); vibrate(); enqueue({ it.punctuation(text) }) }
+    private fun space() { rootCard?.dismiss(); vibrate(); enqueue({ it.space() }) }
     private fun deleteKey() {
+        rootCard?.dismiss()
         vibrate()
         if (destroyed || !ready) return
         val token = session.get()
@@ -277,6 +285,7 @@ class FansonInputMethodService : InputMethodService() {
     }
 
     private fun enter() {
+        rootCard?.dismiss()
         if (destroyed || !ready) return
         vibrate()
         val token = session.get()
@@ -325,6 +334,7 @@ class FansonInputMethodService : InputMethodService() {
 
     private fun render() {
         if (destroyed) return
+        rootCard?.dismiss(); rootCard = null
         val container = root ?: return
         if (!::ui.isInitialized) return
         rememberEmojiCategoryPosition()
@@ -388,6 +398,7 @@ class FansonInputMethodService : InputMethodService() {
     }
 
     private fun renderBody() {
+        rootCard?.dismiss()
         cancelRepeat()
         rememberEmojiCategoryPosition()
         val container = body ?: return
@@ -439,7 +450,13 @@ class FansonInputMethodService : InputMethodService() {
     private fun renderKeyboard(container: LinearLayout) {
         val rootHints = mapOf('q' to "金", 'w' to "人", 'e' to "月", 'r' to "白", 't' to "禾", 'y' to "言", 'u' to "立", 'i' to "水", 'o' to "火", 'p' to "之", 'a' to "工", 's' to "木", 'd' to "大", 'f' to "土", 'g' to "王", 'h' to "目", 'j' to "日", 'k' to "口", 'l' to "田", 'x' to "纟", 'c' to "又", 'v' to "女", 'b' to "子", 'n' to "已", 'm' to "山")
         val showRoots = chinese && showRootHints && !password
-        val numbers = "1234567890"
+        if (showNumberRow) {
+            val numberRow = ui.row().apply { contentDescription = "数字行" }
+            "1234567890".forEach { digit ->
+                ui.addWeighted(numberRow, ui.button(digit.toString()) { punct(digit.toString()) }.apply { textSize = 18f }, height = keyHeight)
+            }
+            container.addView(numberRow)
+        }
         listOf("qwertyuiop", "asdfghjkl", "zxcvbnm").forEachIndexed { index, chars ->
             val row = ui.row()
             if (index == 1) row.setPadding(dp(14), 0, dp(14), 0)
@@ -447,12 +464,19 @@ class FansonInputMethodService : InputMethodService() {
                 if (uppercase && !chinese) R.drawable.ic_caps else R.drawable.ic_shift,
                 "切换大小写", action = { shift() }
             ), 1.25f, keyHeight)
-            chars.forEachIndexed { position, char ->
+            chars.forEach { char ->
                 val label = if (chinese || uppercase) char.uppercase() else char.toString()
-                val key = ui.button(label + if (showRoots && rootHints[char] != null) "\n${rootHints[char]}" else "") { letter(char) }
+                val key = if (chinese && char == 'z') ui.iconButton(R.drawable.ic_pronunciation_lookup, "拼音反查（暂未开放）") {
+                    rootCard?.dismiss(); hint("拼音反查暂未开放")
+                } else ui.button(label + if (showRoots && rootHints[char] != null) "\n${rootHints[char]}" else "") { letter(char) }
                 key.textSize = if (showRoots) 14f else 20f
-                key.contentDescription = char.toString()
-                if (index == 0) key.setOnLongClickListener { punct(numbers[position].toString()); true }
+                if (!chinese || char != 'z') key.contentDescription = char.toString()
+                if (showRoots && char in 'a'..'y') key.setOnLongClickListener {
+                    vibrate()
+                    (rootCard ?: WubiRootCard(ui).also { rootCard = it }).show(key, char)
+                    true
+                }
+                else key.isLongClickable = false
                 ui.addWeighted(row, key, height = keyHeight)
             }
             if (index == 2) ui.addWeighted(row, deleteButton(), 1.25f, keyHeight)

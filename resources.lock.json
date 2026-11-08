@@ -3,7 +3,8 @@
     "rime/rime-wubi": "152a0d3f3efe40cae216d1e3b338242446848d07",
     "unicode-org/cldr": "e1d37acce5dae468c414172be53b666d58d45be8",
     "BYVoid/OpenCC": "556ed22496d650bd0b13b6c163be9814637970ae",
-    "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6"
+    "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6",
+    "riku-ri/wubi-kb": "c65590f6a524fa7cb9459d2095be87d22bd839fc"
   },
   "sources": {
     "wubi86.dict.yaml": {
@@ -65,6 +66,32 @@
     "CC-BY-SA-4.0.txt": {
       "url": "https://raw.githubusercontent.com/creativecommons/creativecommons.org/main/docroot/legalcode/by-sa_4.0.txt",
       "sha256": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5"
+    },
+    "wubi_roots/keys.json": {
+      "url": "https://github.com/riku-ri/wubi-kb/tree/c65590f6a524fa7cb9459d2095be87d22bd839fc",
+      "sha256": "97326c0bca3ee7669d3f30315b366a639280ad1b6c0e5e474841a224f33a4905",
+      "note": "Root-key facts extracted from per-key TeX tables; font license/copyright extracted verbatim from upstream font; upstream font modification notice retained."
+    },
+    "wubi_roots/ARPHICPL.TXT": {
+      "url": "https://github.com/riku-ri/wubi-kb/tree/c65590f6a524fa7cb9459d2095be87d22bd839fc",
+      "sha256": "5e0f84f54ab3464ccb8d1afc4e70b1a5e2391ae3ebedf8e1bc8a34cd91765a73",
+      "note": "Root-key facts extracted from per-key TeX tables; font license/copyright extracted verbatim from upstream font; upstream font modification notice retained."
+    },
+    "wubi_roots/FONT-COPYRIGHT.txt": {
+      "url": "https://github.com/riku-ri/wubi-kb/tree/c65590f6a524fa7cb9459d2095be87d22bd839fc",
+      "sha256": "06943953a4d97d6a8d58be10fdfc886f41da9b0ef2fd5996cbaceb626cd8145d",
+      "note": "Root-key facts extracted from per-key TeX tables; font license/copyright extracted verbatim from upstream font; upstream font modification notice retained."
+    },
+    "wubi_roots/UPSTREAM-FONT-CHANGES.adoc": {
+      "url": "https://github.com/riku-ri/wubi-kb/tree/c65590f6a524fa7cb9459d2095be87d22bd839fc",
+      "sha256": "65896904255a33da86cc625c0058a311f5dab601332d56abc6d23f453d4b4b85",
+      "note": "Root-key facts extracted from per-key TeX tables; font license/copyright extracted verbatim from upstream font; upstream font modification notice retained."
     }
+  },
+  "wubi_root_font": {
+    "url": "https://github.com/riku-ri/wubi-kb/releases/download/font/UMingCN-wubi-86-kb.ttf",
+    "sha256": "4b9d2a7a2473ff39e097565e8906875fbe1097deac7e0891c0b150244d71223a",
+    "license": "ARPHIC PUBLIC LICENSE",
+    "fonttools": "4.55.8"
   }
 }
