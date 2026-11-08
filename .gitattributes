@@ -1,0 +1,11 @@
+* text=auto
+gradlew text eol=lf
+*.bat text eol=crlf
+
+# Pinned source data and runtime assets must retain their exact checksum bytes.
+third_party/** -text
+app/src/main/assets/** -text
+
+*.png binary
+*.db binary
+*.jar binary

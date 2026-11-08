@@ -1,0 +1,18 @@
+{
+  "wubi_entries": 136239,
+  "emoji_sequences": 3781,
+  "revisions": {
+    "rime/rime-wubi": "152a0d3f3efe40cae216d1e3b338242446848d07",
+    "unicode-org/cldr": "e1d37acce5dae468c414172be53b666d58d45be8",
+    "BYVoid/OpenCC": "556ed22496d650bd0b13b6c163be9814637970ae",
+    "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6"
+  },
+  "assets": {
+    "wubi86.db": "a42d340cb0e456ba96a348606778da443743abee13b536f80cd19af827925894",
+    "emoji.json": "fe89ec8a404f80d8ba56df6b723db89aeddddea4aa6fcdf338b6a624ef6058cc",
+    "traditional.tsv": "8e128e24cc56ae9bd1b72f1d43efd31a7128837e7c4a4c4fecb2ee92d9438147",
+    "english.txt": "b4944ce250fb8e217308cb12cd840be1d519b437d08e2482cfa7989c80de532d"
+  },
+  "traditional_mappings": 53076,
+  "english_words": 46717
+}

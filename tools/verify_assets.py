@@ -1,0 +1,48 @@
+"""Offline integrity and privacy checks. Does not contact any connected phone."""
+import hashlib
+import json
+import sqlite3
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+ASSETS = ROOT / "app/src/main/assets"
+info = json.loads((ASSETS / "data_info.json").read_text(encoding="utf-8"))
+for name, expected in info["assets"].items():
+    assert hashlib.sha256((ASSETS / name).read_bytes()).hexdigest() == expected, name
+db = sqlite3.connect(f"file:{(ASSETS / 'wubi86.db').as_posix()}?mode=ro", uri=True)
+assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+assert db.execute("SELECT count(*) FROM entries").fetchone()[0] == info["wubi_entries"]
+assert db.execute("SELECT max(weight) FROM entries").fetchone()[0] > 2**31
+for code, text in {"a": "工", "b": "了", "c": "以", "d": "在", "e": "有", "f": "地", "g": "一", "h": "上", "i": "不", "j": "是", "k": "中", "l": "国", "m": "同", "n": "民", "o": "为", "p": "这", "q": "我", "r": "的", "s": "要", "t": "和", "u": "产", "v": "发", "w": "人", "x": "经", "y": "主"}.items():
+    assert db.execute("SELECT text FROM entries WHERE code=? ORDER BY weight DESC,text LIMIT 1", (code,)).fetchone()[0] == text, code
+assert not db.execute("SELECT code FROM entries WHERE length(code)>4 OR code GLOB '*[^a-y]*' LIMIT 1").fetchall()
+db.close()
+lock = json.loads((ROOT / 'resources.lock.json').read_text(encoding='utf-8'))
+for name, entry in lock['sources'].items():
+    assert hashlib.sha256((ROOT / 'third_party' / name).read_bytes()).hexdigest() == entry['sha256'], name
+words = (ASSETS / 'english.txt').read_text(encoding='utf-8').splitlines()
+assert len(words) == info['english_words'] and len(set(words)) == len(words)
+assert all(word.isascii() and word.isalpha() and word.islower() for word in words)
+assert {'apple', 'application', 'apply'} <= set(words)
+mapping = dict(line.split('\t') for line in (ASSETS / 'traditional.tsv').read_text(encoding='utf-8').splitlines())
+assert len(mapping) == info['traditional_mappings']
+assert {'發', '髮'} <= set(mapping['发'].split())
+assert mapping['头发'] == '頭髮' and mapping['发展'] == '發展'
+emoji = json.loads((ASSETS / "emoji.json").read_text(encoding="utf-8"))
+assert len(emoji) == info["emoji_sequences"]
+assert len({entry["text"] for entry in emoji}) == len(emoji)
+for value in ["😀", "👍🏽", "👨‍👩‍👧‍👦", "🇨🇳", "❤️"]:
+    assert any(entry["text"] == value for entry in emoji), value
+assert any("笑" in entry["keywords"] for entry in emoji)
+manifest = ET.parse(ROOT / "app/src/main/AndroidManifest.xml").getroot()
+ns = "{http://schemas.android.com/apk/res/android}"
+permissions = {node.attrib[ns + "name"] for node in manifest.findall("uses-permission")}
+assert permissions == {"android.permission.VIBRATE"}, permissions
+assert manifest.find("application").attrib[ns + "allowBackup"] == "false"
+for service in manifest.findall("application/service"):
+    assert service.attrib[ns + "permission"] == "android.permission.BIND_INPUT_METHOD"
+for mode in ET.parse(ROOT / "app/src/main/res/xml/data_extraction_rules.xml").getroot():
+    domains = {node.attrib["domain"] for node in mode.findall("exclude")}
+    assert {"root", "file", "database", "sharedpref", "external", "device_root", "device_file", "device_database", "device_sharedpref"} <= domains
+print(f"PASS: {info['wubi_entries']} Wubi entries; 25 abbreviated-code preferences; {len(emoji)} emoji sequences; checksums; privacy manifest; backup exclusions")

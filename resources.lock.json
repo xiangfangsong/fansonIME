@@ -1,0 +1,70 @@
+{
+  "revisions": {
+    "rime/rime-wubi": "152a0d3f3efe40cae216d1e3b338242446848d07",
+    "unicode-org/cldr": "e1d37acce5dae468c414172be53b666d58d45be8",
+    "BYVoid/OpenCC": "556ed22496d650bd0b13b6c163be9814637970ae",
+    "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6"
+  },
+  "sources": {
+    "wubi86.dict.yaml": {
+      "url": "https://raw.githubusercontent.com/rime/rime-wubi/152a0d3f3efe40cae216d1e3b338242446848d07/wubi86.dict.yaml",
+      "sha256": "f833d86b72341fe82e069a425b6625f29ef85f1bc0f34f6fb7975fe514888b5a"
+    },
+    "RIME-LGPL-3.0.txt": {
+      "url": "https://raw.githubusercontent.com/rime/rime-wubi/152a0d3f3efe40cae216d1e3b338242446848d07/LICENSE",
+      "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+    },
+    "RIME-AUTHORS.txt": {
+      "url": "https://raw.githubusercontent.com/rime/rime-wubi/152a0d3f3efe40cae216d1e3b338242446848d07/AUTHORS",
+      "sha256": "4e4ca0e3ae6763a7cd5913f92c3b28091a7ec97d5cf4fc96c8f1a294e43f2839"
+    },
+    "GPL-3.0.txt": {
+      "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    "emoji-test.txt": {
+      "url": "https://www.unicode.org/Public/emoji/16.0/emoji-test.txt",
+      "sha256": "24f0c534e86cf142e2496953e8f0e46a3e702392911eddcd29c6cced85139697"
+    },
+    "annotations-zh.xml": {
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/e1d37acce5dae468c414172be53b666d58d45be8/common/annotations/zh.xml",
+      "sha256": "487e16c5e64b6ac1cb38a91b5f2dc25349ded224bcd78ec1f14a92bba3ef3147"
+    },
+    "annotations-derived-zh.xml": {
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/e1d37acce5dae468c414172be53b666d58d45be8/common/annotationsDerived/zh.xml",
+      "sha256": "01d48d98a8612f779c17707db51f2ba2c55292d6c690f8a0828dd748c042206a"
+    },
+    "UNICODE-LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/unicode-org/cldr/e1d37acce5dae468c414172be53b666d58d45be8/LICENSE",
+      "sha256": "743308f92225393665b0722b73418b4d4061fd2163e8e9c38b3368904acf19d6"
+    },
+    "STCharacters.txt": {
+      "url": "https://raw.githubusercontent.com/BYVoid/OpenCC/556ed22496d650bd0b13b6c163be9814637970ae/data/dictionary/STCharacters.txt",
+      "sha256": "ed1d268e0ad028511dcf5b0089faed0a980ad332449ec11d481ceefde6879f41"
+    },
+    "STPhrases.txt": {
+      "url": "https://raw.githubusercontent.com/BYVoid/OpenCC/556ed22496d650bd0b13b6c163be9814637970ae/data/dictionary/STPhrases.txt",
+      "sha256": "17fece21a28f3db2dc32397abd73d21ae73261c3f295fa6a3fe64b5e8d8b554b"
+    },
+    "OPENCC-LICENSE.txt": {
+      "url": "https://raw.githubusercontent.com/BYVoid/OpenCC/556ed22496d650bd0b13b6c163be9814637970ae/LICENSE",
+      "sha256": "b534e465949558eec2597b04f5092b5e161236a68dfbfd04d547592ac3964308"
+    },
+    "OPENCC-AUTHORS.txt": {
+      "url": "https://raw.githubusercontent.com/BYVoid/OpenCC/556ed22496d650bd0b13b6c163be9814637970ae/AUTHORS",
+      "sha256": "cb34e252fa994679bcbfc8355581e821ceda44bd857875e2cfe15b7ec4eec006"
+    },
+    "en_50k.txt": {
+      "url": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/525f9b560de45753a5ea01069454e72e9aa541c6/content/2018/en/en_50k.txt",
+      "sha256": "5351ff405b1126ef555791dd4d9798a48e3e9a501a9fc481a9da957752cfb458"
+    },
+    "FREQUENCYWORDS-README.md": {
+      "url": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/525f9b560de45753a5ea01069454e72e9aa541c6/README.md",
+      "sha256": "a92fcc50e27f7b2d5860ec1c1ce794dc4c892d945bfa4c8c3136cdfd213ee710"
+    },
+    "CC-BY-SA-4.0.txt": {
+      "url": "https://raw.githubusercontent.com/creativecommons/creativecommons.org/main/docroot/legalcode/by-sa_4.0.txt",
+      "sha256": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">放松输入法</string>
+    <string name="ime_name">放松输入法</string>
+    <string name="key_height_value">按键高度：%1$d dp</string>
+</resources>
