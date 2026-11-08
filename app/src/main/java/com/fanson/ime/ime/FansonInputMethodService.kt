@@ -55,7 +55,7 @@ class FansonInputMethodService : InputMethodService() {
     private lateinit var ui: Ui
     private var root: LinearLayout? = null
     private var candidateRow: CandidateStrip? = null
-    private var codeLabel: TextView? = null
+    private var toolbar: LinearLayout? = null
     private var body: LinearLayout? = null
     private var candidateSnapshot: List<Candidate> = emptyList()
     private var currentCode = ""
@@ -341,8 +341,9 @@ class FansonInputMethodService : InputMethodService() {
         cancelRepeat()
         container.removeAllViews(); container.setBackgroundColor(ui.palette.background)
         container.setPadding(dp(3), dp(4), dp(3), dp(4))
-        val tools = ui.row()
-        fun tool(label: String, action: () -> Unit) { ui.addWeighted(tools, ui.button(label, action = action).apply { textSize = 12f }, height = 40) }
+        val tools = ui.row().apply { contentDescription = "功能按钮栏" }
+        toolbar = tools
+        fun tool(label: String, action: () -> Unit) { ui.addWeighted(tools, ui.button(label, action = action).apply { textSize = 12f; isEnabled = ready }, height = 40) }
         fun icon(icon: Int, description: String, action: () -> Unit) {
             ui.addWeighted(tools, ui.iconButton(icon, description, action = action), height = 40)
         }
@@ -354,9 +355,7 @@ class FansonInputMethodService : InputMethodService() {
             resolveThen { requestHideSelf(0); startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
         icon(R.drawable.ic_hide, "收起键盘") { requestHideSelf(0) }
-        container.addView(tools)
-        codeLabel = ui.text("", 12f, ui.palette.muted)
-        container.addView(codeLabel, LinearLayout.LayoutParams(-1, dp(26)))
+        container.addView(tools, LinearLayout.LayoutParams(-1, dp(44)))
         candidateRow = CandidateStrip(ui, ::select, { setCandidatesExpanded(true) }, { setCandidatesExpanded(false) }) { overflow ->
             if (!overflow && expanded) setCandidatesExpanded(false)
         }
@@ -367,20 +366,13 @@ class FansonInputMethodService : InputMethodService() {
     }
 
     private fun renderCandidates() {
-        // The search keyboard also needs Wubi candidates to compose its query.
-        val visibility = if (panel == "keyboard" || (panel == "emoji" && emojiSearching)) View.VISIBLE else View.GONE
-        codeLabel?.visibility = visibility
-        candidateRow?.visibility = visibility
-        codeLabel?.text = when {
-            loadFailed -> "离线数据加载失败，请重新启用输入法"
-            !ready -> "正在准备离线词库…"
-            currentCode.isNotEmpty() -> "${if (!chinese) "英文" else if (emojiSearching) "搜索编码" else "编码"}：$currentCode"
-            emojiSearching -> "五笔搜索 emoji · 点击候选组成关键词"
-            password -> "密码输入 · 无历史记录 · 剪贴板默认遮挡"
-            else -> "${if (chinese) "五笔86" else if (uppercase) "英文大写" else "英文小写"} · 本地运行"
-        }
+        val inputPanel = panel == "keyboard" || (panel == "emoji" && emojiSearching)
+        val showCandidates = inputPanel && currentCode.isNotEmpty() && !password && (chinese || spelling)
+        toolbar?.visibility = if (showCandidates) View.GONE else View.VISIBLE
+        candidateRow?.visibility = if (showCandidates) View.VISIBLE else View.GONE
         val row = candidateRow ?: return
-        row.submit(candidateSnapshot, expanded, if (currentCode.isEmpty()) "" else if (chinese) wubiEnterAction.noMatchHint else "无匹配，回车提交字母")
+        val composition = if (showCandidates) "${if (!chinese) "英文" else if (emojiSearching) "搜索编码" else "编码"}：$currentCode" else ""
+        row.submit(candidateSnapshot, expanded, if (chinese) wubiEnterAction.noMatchHint else "无匹配，回车提交字母", composition)
     }
 
     private fun setCandidatesExpanded(value: Boolean) {
@@ -548,11 +540,12 @@ class FansonInputMethodService : InputMethodService() {
     private fun cancelRepeat() { repeatAction?.let { main.removeCallbacks(it) }; repeatAction = null }
 
     private fun renderNumbers(container: LinearLayout) {
-        listOf(listOf("1", "2", "3", "+"), listOf("4", "5", "6", "-"), listOf("7", "8", "9", "/"), listOf(".", "0", "@", "_")).forEach { values ->
+        listOf(listOf("1", "2", "3", "+"), listOf("4", "5", "6", "-"), listOf("7", "8", "9", "*"), listOf(".", "0", "@", "/")).forEach { values ->
             val row = ui.row(); values.forEach { value -> ui.addWeighted(row, ui.button(value) { punct(value) }, height = keyHeight) }; container.addView(row)
         }
         val row = ui.row()
-        ui.addWeighted(row, ui.button("五笔86 / ABC") { switchPanel("numbers") }, height = 44)
+        ui.addWeighted(row, ui.button("返回") { switchPanel("numbers") }, height = 44)
+        ui.addWeighted(row, ui.button("_") { punct("_") }, height = 44)
         ui.addWeighted(row, deleteButton(), height = 44)
         ui.addWeighted(row, enterButton(), height = 44)
         container.addView(row)
@@ -757,7 +750,10 @@ class FansonInputMethodService : InputMethodService() {
         lastVibration = SystemClock.uptimeMillis()
         getSystemService(Vibrator::class.java)?.vibrate(VibrationEffect.createOneShot(10, VibrationEffect.DEFAULT_AMPLITUDE))
     }
-    private fun hint(text: String) { codeLabel?.text = text }
+    private fun hint(text: String) {
+        if (candidateRow?.visibility == View.VISIBLE && candidateRow?.showHint(text) == true) return
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+    }
 
     override fun onDestroy() {
         destroyed = true

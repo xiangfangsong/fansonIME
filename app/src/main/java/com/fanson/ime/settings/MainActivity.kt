@@ -43,9 +43,8 @@ class MainActivity : Activity() {
             insets
         }
         setContentView(scroll)
-        page.addView(ui.text("放松 / 个人输入法", 12f, ui.palette.accent))
         page.addView(ui.title(getString(R.string.app_name), 34f))
-        page.addView(ui.text("五笔86 · 全部离线 · 自己掌控", 16f, ui.palette.muted))
+        page.addView(ui.text("全部离线 · 自己撑控", 16f, ui.palette.muted))
         status = ui.text("", 14f, ui.palette.accent)
         page.addView(status)
         val start = ui.row()
@@ -125,7 +124,7 @@ class MainActivity : Activity() {
         }
         page.addView(clear, LinearLayout.LayoutParams(-1, dp(48)))
         section("关于")
-        page.addView(ui.text("放松输入法 0.1.8 · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0", 13f, ui.palette.muted))
+        page.addView(ui.text("放松输入法 0.1.9 · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0", 13f, ui.palette.muted))
         page.addView(ui.button("第三方数据与许可") { showLicenses() }, LinearLayout.LayoutParams(-1, dp(48)))
         refreshStatus()
     }
