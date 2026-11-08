@@ -1,7 +1,10 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="28dp" android:height="28dp" android:viewportWidth="28" android:viewportHeight="28">
-    <!-- Pronunciation lookup: 音 + magnifier, distinct from dictation. -->
+    android:width="30dp" android:height="30dp" android:viewportWidth="30" android:viewportHeight="30">
+    <!-- A profile speaks Z into a magnifier. Z remains readable at keyboard size. -->
     <path android:fillColor="@android:color/transparent" android:strokeColor="#000000"
-        android:strokeWidth="1.6" android:strokeLineCap="round" android:strokeLineJoin="round"
-        android:pathData="M11,3L11,5M4,6L18,6M7,6L8.5,10M15,6L13.5,10M3,11L19,11M6,14L15,14L15,23L6,23ZM6,18.5L15,18.5M24,18A5,5 0,1 1,14,18A5,5 0,1 1,24,18M22.5,21.5L26,25" />
+        android:strokeWidth="1.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M5,27L5,22C1,20 1,15 3,12C4.5,10 7,9.5 9,11M10,15L12,18L10,19L10,22L7.5,22L7.5,27M10,20L12,20M25,11A8,8 0,1 1,9,11A8,8 0,1 1,25,11M23,17L28,23" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="#000000"
+        android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M13.5,7L20.5,7L13.5,15L20.5,15" />
 </vector>

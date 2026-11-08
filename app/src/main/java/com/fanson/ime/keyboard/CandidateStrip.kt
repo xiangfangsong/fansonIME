@@ -5,10 +5,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
 import com.fanson.ime.R
 import com.fanson.ime.engine.Candidate
 
-/** A measured, non-scrolling row. Hidden entries can only be selected in the grid. */
+/** Normal candidates use measured slots. Reading mode scrolls without truncating polyphones. */
 @android.annotation.SuppressLint("ViewConstructor") // Created with callbacks in code, never inflated from XML.
 class CandidateStrip(
     private val ui: Ui,
@@ -20,6 +22,7 @@ class CandidateStrip(
     private val buttons = mutableListOf<Button>()
     private var arrow: Button? = null
     private var hint: View? = null
+    private var readingScroll: HorizontalScrollView? = null
     val composingLabel: TextView = ui.text("", 12f, ui.palette.muted).apply {
         isSingleLine = true
         ellipsize = TextUtils.TruncateAt.END
@@ -37,11 +40,11 @@ class CandidateStrip(
 
     init { contentDescription = "候选栏"; clipChildren = true; clipToPadding = true }
 
-    fun submit(candidates: List<Candidate>, expanded: Boolean, emptyHint: String, composition: String = "") {
+    fun submit(candidates: List<Candidate>, expanded: Boolean, emptyHint: String, composition: String = "", readings: Boolean = false) {
         revision++
         reportedOverflow = null
         plan = CandidateRowPlan(emptyList(), false)
-        removeAllViews(); buttons.clear(); arrow = null; hint = null
+        removeAllViews(); buttons.clear(); arrow = null; hint = null; readingScroll = null
         this.expanded = expanded
         composingLabel.text = composition
         composingLabel.contentDescription = composition
@@ -51,16 +54,23 @@ class CandidateStrip(
                 isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
             }.also { addView(it) }
         } else {
-            candidates.forEach { candidate ->
-                val label = candidate.text + if (candidate.exact) "" else " · ${candidate.code}"
-                val button = ui.button(label) {
+            val readingContent = if (readings) ui.row() else null
+            if (readingContent != null) {
+                readingScroll = HorizontalScrollView(context).apply {
+                    isHorizontalScrollBarEnabled = false
+                    contentDescription = "读音候选，左右滑动查看"
+                    addView(readingContent)
+                }.also { addView(it) }
+            }
+            candidates.forEachIndexed { index, candidate ->
+                val button = candidateButton(ui, candidate, readings) {
                     select(candidate)
                 }.apply {
-                    textSize = 18f; setPadding(context.dp(12), 0, context.dp(12), 0)
-                    isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
-                    visibility = GONE
+                    visibility = if (readings) VISIBLE else GONE
                 }
-                buttons += button; addView(button)
+                buttons += button
+                if (readingContent != null) readingContent.addView(button, LinearLayout.LayoutParams(-2, context.dp(44)).apply { marginEnd = if (index < candidates.lastIndex) gap else 0 })
+                else addView(button)
             }
             arrow = ui.iconButton(
                 if (expanded) R.drawable.ic_collapse_candidates else R.drawable.ic_expand_candidates,
@@ -91,6 +101,20 @@ class CandidateStrip(
         contentLeft = if (hasComposition) (composingWidth + gap).coerceAtMost(width) else 0
         val candidateWidth = (width - contentLeft).coerceAtLeast(0)
         if (hasComposition) composingLabel.measure(MeasureSpec.makeMeasureSpec(composingWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+        val scroll = readingScroll
+        if (scroll != null) {
+            plan = CandidateRowLayout.readingPlan(natural, candidateWidth, gap)
+            val overflow = plan.overflow
+            val arrowSize = if (overflow) minOf(arrowWidth, candidateWidth) else 0
+            scroll.measure(MeasureSpec.makeMeasureSpec((candidateWidth - arrowSize).coerceAtLeast(0), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+            arrow?.let {
+                it.visibility = if (overflow) VISIBLE else GONE
+                it.measure(MeasureSpec.makeMeasureSpec(arrowSize, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+            }
+            setMeasuredDimension(width, height)
+            reportOverflow()
+            return
+        }
         plan = CandidateRowLayout.plan(natural, candidateWidth, arrowWidth, gap)
         buttons.forEachIndexed { index, button ->
             button.visibility = if (index < plan.widths.size) VISIBLE else GONE
@@ -105,6 +129,10 @@ class CandidateStrip(
         }
         hint?.measure(MeasureSpec.makeMeasureSpec(candidateWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
         setMeasuredDimension(width, height)
+        reportOverflow()
+    }
+
+    private fun reportOverflow() {
         if (reportedOverflow != plan.overflow) {
             reportedOverflow = plan.overflow
             val value = plan.overflow
@@ -116,9 +144,13 @@ class CandidateStrip(
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         if (composingLabel.parent === this) composingLabel.layout(0, 0, composingWidth, measuredHeight)
         var x = contentLeft
-        buttons.take(plan.widths.size).forEach { button ->
-            button.layout(x, 0, x + button.measuredWidth, measuredHeight)
-            x += button.measuredWidth + gap
+        if (readingScroll != null) {
+            readingScroll?.let { it.layout(x, 0, x + it.measuredWidth, measuredHeight) }
+        } else {
+            buttons.take(plan.widths.size).forEach { button ->
+                button.layout(x, 0, x + button.measuredWidth, measuredHeight)
+                x += button.measuredWidth + gap
+            }
         }
         arrow?.takeIf { it.visibility == VISIBLE }?.let { it.layout(width - it.measuredWidth, 0, width, measuredHeight) }
         hint?.layout(contentLeft, 0, width, measuredHeight)

@@ -41,6 +41,15 @@
 - fansonIME 于 2026-11-08 仅保留所需字形并重命名为 **Fanson Wubi Roots**，字形轮廓不变；修改声明写入字体 name 表。派生字体随 APK 和项目提供，继续按原许可自由复制、修改、再分发，不提供担保。
 - `tools/prepare_root_data.py --source-font PATH` 使用 FontTools 4.55.8 校验原始字体并重建约 83 KB 子集；源字体下载地址和校验值见 `resources.lock.json`。构建不会联网下载字体。专用字体仅用于卡片，不影响正文的系统字体。
 
+## 离线候选读音
+
+- 单字资料：[mozillazg/pinyin-data](https://github.com/mozillazg/pinyin-data)，revision `fe29ad32bdf352b31a02b9936e537f575432e9a6`，使用 `pinyin.txt`。Copyright (c) 2016 mozillazg，MIT。
+- 词组资料：[mozillazg/phrase-pinyin-data](https://github.com/mozillazg/phrase-pinyin-data)，revision `4afa3226ce53c9138b939e83c3bb294dbe0da511`，使用 `pinyin.txt`。Copyright (c) 2017 mozillazg，MIT。
+- 原始文件、README 和完整许可保存在 `third_party/pronunciation/`；单字资料的 Unihan 等来源、词组资料的初始来源见各上游 README。固定下载 URL 和 SHA-256 见 `resources.lock.json`。
+- `tools/prepare_pronunciation_data.py` 离线生成 `pronunciation.db`：Unicode NFC、按原序稳定去重，保留全部已收录读音；使用现有 Apache-2.0 OpenCC 映射补充繁体词组查询键，原始整词记录优先，不增造读音。
+- 最终含 44,440 单字、47,152 原始词组及 33,219 个繁体词组查询别名；覆盖报告在 `third_party/pronunciation/coverage.json`。未知读音不推断，词组未收录时仅提供明确标示的逐字参考。
+- 原作者、来源、修改说明及两个项目的 MIT 全文同时随 APK 打包，可从“第三方数据与许可”查看。不暗示资料作者认可本项目。
+
 ## Gradle wrapper
 
 标准 Gradle wrapper 脚本及 JAR，Gradle 8.9。脚本保留上游版权与许可头。Gradle 项目：https://github.com/gradle/gradle，许可：https://www.apache.org/licenses/LICENSE-2.0 。

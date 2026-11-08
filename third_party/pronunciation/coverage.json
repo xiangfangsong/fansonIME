@@ -1,0 +1,17 @@
+{
+  "characters": 44440,
+  "phrases": 80371,
+  "source_phrases": 47152,
+  "traditional_phrase_aliases": 33219,
+  "wubi_characters": 70391,
+  "wubi_characters_with_readings": 41467,
+  "wubi_characters_without_readings": 28924,
+  "missing_by_block": {
+    "Basic": 16,
+    "A": 797,
+    "B": 28087,
+    "C": 0,
+    "D": 0,
+    "E": 0
+  }
+}

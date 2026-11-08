@@ -4,7 +4,9 @@
     "unicode-org/cldr": "e1d37acce5dae468c414172be53b666d58d45be8",
     "BYVoid/OpenCC": "556ed22496d650bd0b13b6c163be9814637970ae",
     "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6",
-    "riku-ri/wubi-kb": "c65590f6a524fa7cb9459d2095be87d22bd839fc"
+    "riku-ri/wubi-kb": "c65590f6a524fa7cb9459d2095be87d22bd839fc",
+    "mozillazg/pinyin-data": "fe29ad32bdf352b31a02b9936e537f575432e9a6",
+    "mozillazg/phrase-pinyin-data": "4afa3226ce53c9138b939e83c3bb294dbe0da511"
   },
   "sources": {
     "wubi86.dict.yaml": {
@@ -86,6 +88,30 @@
       "url": "https://github.com/riku-ri/wubi-kb/tree/c65590f6a524fa7cb9459d2095be87d22bd839fc",
       "sha256": "65896904255a33da86cc625c0058a311f5dab601332d56abc6d23f453d4b4b85",
       "note": "Root-key facts extracted from per-key TeX tables; font license/copyright extracted verbatim from upstream font; upstream font modification notice retained."
+    },
+    "pronunciation/pinyin-data/LICENSE": {
+      "url": "https://raw.githubusercontent.com/mozillazg/pinyin-data/fe29ad32bdf352b31a02b9936e537f575432e9a6/LICENSE",
+      "sha256": "9c048697be2502a16e8bcb282d5d465a07295b2def0ffb05a269c5d39dbe1586"
+    },
+    "pronunciation/pinyin-data/README.md": {
+      "url": "https://raw.githubusercontent.com/mozillazg/pinyin-data/fe29ad32bdf352b31a02b9936e537f575432e9a6/README.md",
+      "sha256": "864b2e4f9e4dbdb01bfa32892b78c25bd982eb45fa6faf1d6c701be3d3f707d3"
+    },
+    "pronunciation/pinyin-data/pinyin.txt": {
+      "url": "https://raw.githubusercontent.com/mozillazg/pinyin-data/fe29ad32bdf352b31a02b9936e537f575432e9a6/pinyin.txt",
+      "sha256": "2342a6f98c85dbc3c8d26aef31744876a36326c6466e51e9a0f16898c36c2011"
+    },
+    "pronunciation/phrase-pinyin-data/LICENSE": {
+      "url": "https://raw.githubusercontent.com/mozillazg/phrase-pinyin-data/4afa3226ce53c9138b939e83c3bb294dbe0da511/LICENSE",
+      "sha256": "89ac55df747e4776088c3e77531ef61b973a1a59dd8e6a4548a58996da9a4f70"
+    },
+    "pronunciation/phrase-pinyin-data/README.md": {
+      "url": "https://raw.githubusercontent.com/mozillazg/phrase-pinyin-data/4afa3226ce53c9138b939e83c3bb294dbe0da511/README.md",
+      "sha256": "79e9b1a13e6948af49c055a75a792df7844429bb8de3d38c75f383886e100654"
+    },
+    "pronunciation/phrase-pinyin-data/pinyin.txt": {
+      "url": "https://raw.githubusercontent.com/mozillazg/phrase-pinyin-data/4afa3226ce53c9138b939e83c3bb294dbe0da511/pinyin.txt",
+      "sha256": "5d4d86b1337bb2fca95bc5135564a821bfdb40597481ee3e3871bf52d4668622"
     }
   },
   "wubi_root_font": {

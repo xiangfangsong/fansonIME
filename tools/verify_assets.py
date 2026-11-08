@@ -18,6 +18,18 @@ for code, text in {"a": "工", "b": "了", "c": "以", "d": "在", "e": "有", "
     assert db.execute("SELECT text FROM entries WHERE code=? ORDER BY weight DESC,text LIMIT 1", (code,)).fetchone()[0] == text, code
 assert not db.execute("SELECT code FROM entries WHERE length(code)>4 OR code GLOB '*[^a-y]*' LIMIT 1").fetchall()
 db.close()
+readings_db = sqlite3.connect(f"file:{(ASSETS / 'pronunciation.db').as_posix()}?mode=ro", uri=True)
+assert readings_db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+assert readings_db.execute('SELECT count(*) FROM readings').fetchone()[0] == info['pronunciation']['characters'] + info['pronunciation']['phrases']
+readings = lambda text: readings_db.execute('SELECT pronunciations FROM readings WHERE text=?', (text,)).fetchone()[0].split('\n')
+assert {'zhòng', 'chóng'} <= set(readings('重'))
+assert {'háng', 'xíng'} <= set(readings('行'))
+assert readings('银行') == ['yín háng']
+assert readings('重庆') == ['chóng qìng']
+assert readings('銀行') == ['yín háng']
+assert readings('重慶') == ['chóng qìng']
+assert readings('𠮟') == ['chì']
+readings_db.close()
 lock = json.loads((ROOT / 'resources.lock.json').read_text(encoding='utf-8'))
 for name, entry in lock['sources'].items():
     assert hashlib.sha256((ROOT / 'third_party' / name).read_bytes()).hexdigest() == entry['sha256'], name

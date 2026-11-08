@@ -1,6 +1,6 @@
 package com.fanson.ime.engine
 
-data class Candidate(val text: String, val code: String, val exact: Boolean = true)
+data class Candidate(val text: String, val code: String, val exact: Boolean = true, val reading: String = "")
 
 interface Lexicon {
     /** Exact entries first, then explicitly marked prefix completions. */
@@ -33,7 +33,11 @@ enum class WubiEnterAction(val value: String, val label: String, val noMatchHint
 }
 
 /** A deterministic four-code table engine. Confined to one input worker. */
-class WubiEngine(private val lexicon: Lexicon, private val converter: TraditionalConverter? = null) : InputEngine {
+class WubiEngine(
+    private val lexicon: Lexicon,
+    private val converter: TraditionalConverter? = null,
+    private val pronunciation: PronunciationLexicon? = null
+) : InputEngine {
     override var code: String = ""
         private set
     override var candidates: List<Candidate> = emptyList()
@@ -44,24 +48,38 @@ class WubiEngine(private val lexicon: Lexicon, private val converter: Traditiona
     var traditionalMode = false
         set(value) { if (field != value) { field = value; refresh() } }
 
-    override fun reset() { code = ""; candidates = emptyList() }
+    var showingReadings = false
+        private set
+
+    override fun reset() { code = ""; candidates = emptyList(); showingReadings = false }
     private fun refresh() {
-        val source = if (code.isEmpty()) emptyList() else lexicon.lookup(code)
-        candidates = if (traditionalMode) converter?.candidates(source) ?: source else source
+        val source = if (code.isEmpty() || 'z' in code) emptyList() else lexicon.lookup(code)
+        val converted = if (traditionalMode) converter?.candidates(source) ?: source else source
+        candidates = if (showingReadings) converted.map { it.copy(reading = pronunciation?.reading(it.text) ?: "暂无读音") } else converted
     }
 
     override fun letter(char: Char): EngineResult {
-        if (char !in 'a'..'y') return EngineResult(hint = "Z 键预留给后续反查功能")
+        if (char == 'z') {
+            if (code.isEmpty()) {
+                code = "z"; refresh()
+                return EngineResult(hint = enterAction.noMatchHint)
+            }
+            if (candidates.isEmpty()) return EngineResult(hint = "暂无候选可查读音")
+            showingReadings = !showingReadings
+            refresh()
+            return EngineResult()
+        }
+        if (char !in 'a'..'y') return EngineResult()
         val commits = mutableListOf<String>()
         if (code.length == 4) {
-            if (candidates.isEmpty() || !commitOnFifth) return EngineResult(hint = "请先选词或退格修正")
+            if (showingReadings || candidates.isEmpty() || !commitOnFifth) return EngineResult(hint = "请先选词或退格修正")
             commits += candidates.first().text
             reset()
         }
         code += char
         refresh()
         val exact = candidates.filter { it.exact }
-        if (code.length == 4 && autoCommitUnique && exact.size == 1) {
+        if (code.length == 4 && autoCommitUnique && !showingReadings && exact.size == 1) {
             commits += exact.single().text
             reset()
         }
@@ -104,6 +122,7 @@ class WubiEngine(private val lexicon: Lexicon, private val converter: Traditiona
     override fun backspace(): Boolean {
         if (code.isEmpty()) return false
         code = code.dropLast(1)
+        if (code.isEmpty()) showingReadings = false
         refresh()
         return true
     }

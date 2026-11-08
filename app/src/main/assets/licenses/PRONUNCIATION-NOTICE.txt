@@ -1,0 +1,19 @@
+离线拼音资料
+
+单字：mozillazg/pinyin-data
+https://github.com/mozillazg/pinyin-data
+revision: fe29ad32bdf352b31a02b9936e537f575432e9a6
+Copyright (c) 2016 mozillazg. MIT License，见 pinyin-data-MIT.txt。
+
+词组：mozillazg/phrase-pinyin-data
+https://github.com/mozillazg/phrase-pinyin-data
+revision: 4afa3226ce53c9138b939e83c3bb294dbe0da511
+Copyright (c) 2017 mozillazg. MIT License，见 phrase-pinyin-data-MIT.txt。
+
+fansonIME 于 2026-11-08 将这两个项目的 pinyin.txt 转换为只读 SQLite：
+保留单字的全部已收录带调读音、全部词组读音，稳定去重、统一 NFC。
+使用已内置 OpenCC 映射补充繁体词组查询键；原有词组资料优先，读音内容不变。
+不嵌入其转换程序，不联网查询，不将查询记录写入数据库。
+未知词组明确标为逐字参考；未收录的单字显示“暂无读音”。
+资料不保证包含所有汉字或全部历史、方言及人名读法。
+上游原始资料和 README 保留在 third_party/pronunciation/；校验值见 resources.lock.json。

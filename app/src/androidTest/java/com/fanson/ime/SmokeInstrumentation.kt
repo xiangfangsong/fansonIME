@@ -16,6 +16,7 @@ import android.widget.EditText
 import android.widget.TextView
 import com.fanson.ime.data.LocalStore
 import com.fanson.ime.data.WubiRepository
+import com.fanson.ime.data.PronunciationRepository
 import com.fanson.ime.emoji.EmojiRepository
 import com.fanson.ime.engine.Candidate
 import com.fanson.ime.engine.TraditionalConverter
@@ -64,6 +65,18 @@ class SmokeInstrumentation : Instrumentation() {
                 passed += "offline_english_ranked_vocabulary"
             }
             val emojis = EmojiRepository(targetContext)
+            val xingReading: String
+            PronunciationRepository(targetContext).use { readings ->
+                xingReading = readings.reading("行")
+                check(xingReading.split(" / ").containsAll(listOf("xíng", "háng")))
+                check(readings.reading("重").split(" / ").containsAll(listOf("zhòng", "chóng")))
+                check(readings.reading("银行") == "yín háng")
+                check(readings.reading("銀行") == "yín háng")
+                check(readings.reading("重慶") == "chóng qìng")
+                check(readings.reading("𠀀") == "hē")
+                check(readings.reading("𠮷") == "暂无读音")
+            }
+            passed += "offline_polyphones_phrase_traditional_supplementary_and_missing_readings"
             check(emojis.all.size > 3000)
             check(emojis.filter("popular", "笑", emptyMap()).isNotEmpty())
             check(emojis.all.any { it.text == "👨‍👩‍👧‍👦" })
@@ -155,6 +168,29 @@ class SmokeInstrumentation : Instrumentation() {
                 arrow.performClick(); check(requestedExpand)
             }
             passed += "english_overflow_row_apple_selects_arrow_expands"
+            runOnMainSync {
+                val strip = CandidateStrip(Ui(targetContext, Palette.of(targetContext, "light")), {}, {}, {}, {})
+                val reading = "xíng / háng / héng / xìng / hàng"
+                strip.submit(listOf(Candidate("行", "tf", true, reading), Candidate("工", "a", true, "gōng")), false, "", "编码：tf", true)
+                fun measure(width: Int) {
+                    strip.measure(View.MeasureSpec.makeMeasureSpec(targetContext.dp(width), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(targetContext.dp(44), View.MeasureSpec.EXACTLY))
+                    strip.layout(0, 0, strip.measuredWidth, strip.measuredHeight)
+                }
+                for (width in listOf(0, 20, 120, 320, 2000)) {
+                    measure(width)
+                    val scroll = allViews(strip).filterIsInstance<android.widget.HorizontalScrollView>().single()
+                    check(scroll.left >= strip.composingLabel.right && scroll.right <= strip.width)
+                    val button = allViews(scroll).filterIsInstance<Button>().first()
+                    check(button.text.toString() == "行\n$reading" && button.ellipsize == null)
+                    check(button.layout.lineCount == 2)
+                    check(button.layout.getEllipsisCount(1) == 0)
+                    check(button.layout.getLineWidth(1) <= button.width - button.paddingLeft - button.paddingRight + 1)
+                    check(strip.height == targetContext.dp(44))
+                }
+                measure(120); check(strip.hasOverflow)
+                measure(2000); check(!strip.hasOverflow)
+            }
+            passed += "reading_row_fixed_height_full_polyphones_scroll_and_resize_bounds"
             val inputMethod = targetContext.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
                 .enabledInputMethodList.first { it.packageName == targetContext.packageName }
             check(inputMethod.loadLabel(targetContext.packageManager).toString() == "放松输入法")
@@ -324,16 +360,95 @@ class SmokeInstrumentation : Instrumentation() {
             click("abc"); await { findButton("五笔86") != null }
             setToggle("字母键显示字根提示", false)
             runOnMainSync { check(!findKeyboardButton('q').isLongClickable) }
-            click("拼音反查（暂未开放）")
-            checkCandidateArea(false)
+            click("Z / 查读音")
+            await { findText("编码：z") != null }
+            checkCandidateArea(true)
             runOnMainSync {
-                val lookup = windows().filterIsInstance<Button>().first { visible(it) && it.contentDescription == "拼音反查（暂未开放）" }
+                val lookup = windows().filterIsInstance<Button>().first { visible(it) && it.contentDescription == "Z / 查读音" }
                 check(lookup.text.isEmpty() && lookup.foreground != null)
                 check(editor.text.toString() == "a1")
             }
+            click("换行"); await { editor.text.toString() == "a1z" }
+            checkCandidateArea(false)
             passed += "root_switch_gates_long_press_and_wubi_lookup_icon_keeps_english_z"
             runOnMainSync { editor.setText("") }
             refreshKeyboard()
+            click("t"); await { findText("编码：t") != null }
+            click("f"); await { findText("编码：tf") != null }
+            click("Z / 查读音")
+            await { findButton("行，读音：$xingReading") != null }
+            checkCandidateArea(true)
+            runOnMainSync {
+                check(findButtonOnMain("Z / 查读音").isSelected)
+                check(editor.text.isEmpty())
+            }
+            screenshot("28-offline-polyphone-readings")
+            click("Z / 查读音"); await { findButton("行") != null }
+            runOnMainSync { check(!findButtonOnMain("Z / 查读音").isSelected) }
+            click("Z / 查读音"); await { findButton("行，读音：$xingReading") != null }
+            click("行，读音：$xingReading"); await { editor.text.toString() == "行" }
+            checkCandidateArea(false)
+            runOnMainSync { check(!findButtonOnMain("Z / 查读音").isSelected) }
+            passed += "lookup_z_toggle_exact_candidate_readings_direct_select_and_reset_ui"
+            click("q"); click("v"); await { findText("编码：qv") != null }
+            click("Z / 查读音"); click("t"); click("f")
+            await { findButton("银行，读音：yín háng") != null }
+            screenshot("29-offline-phrase-readings")
+            click("银行，读音：yín háng"); await { editor.text.toString() == "行银行" }
+            click("t"); click("f"); await { findText("编码：tf") != null }
+            click("Z / 查读音"); await { findButton("行，读音：$xingReading") != null }
+            var swipeLeft = 0f; var swipeRight = 0f; var swipeY = 0f
+            runOnMainSync {
+                val scroll = windows().filterIsInstance<android.widget.HorizontalScrollView>().first { visible(it) && it.contentDescription == "读音候选，左右滑动查看" }
+                val position = IntArray(2).also { scroll.getLocationOnScreen(it) }
+                swipeLeft = position[0] + 10f; swipeRight = position[0] + scroll.width - 10f
+                swipeY = position[1] + scroll.height / 2f
+            }
+            val swipeStart = SystemClock.uptimeMillis()
+            sendPointerSync(android.view.MotionEvent.obtain(swipeStart, swipeStart, android.view.MotionEvent.ACTION_DOWN, swipeRight, swipeY, 0))
+            for (step in 1..10) {
+                SystemClock.sleep(16)
+                sendPointerSync(android.view.MotionEvent.obtain(swipeStart, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_MOVE, swipeRight + (swipeLeft - swipeRight) * step / 10, swipeY, 0))
+            }
+            sendPointerSync(android.view.MotionEvent.obtain(swipeStart, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_UP, swipeLeft, swipeY, 0))
+            await {
+                var scrolled = false
+                runOnMainSync { scrolled = windows().filterIsInstance<android.widget.HorizontalScrollView>().any { visible(it) && it.contentDescription == "读音候选，左右滑动查看" && it.scrollX > 0 } }
+                scrolled
+            }
+            runOnMainSync { check(editor.text.toString() == "行银行") }
+            passed += "reading_row_real_swipe_without_accidental_candidate_commit_ui"
+            click("展开候选"); await { findButton("收起候选") != null }
+            runOnMainSync {
+                val grid = windows().filterIsInstance<android.widget.GridLayout>().first { visible(it) && allViews(it).filterIsInstance<Button>().any { b -> b.text.toString() == "行\n$xingReading" } }
+                check(grid.columnCount == 2)
+                check(allViews(grid).filterIsInstance<Button>().any { it.contentDescription == "行，读音：$xingReading" })
+            }
+            screenshot("30-expanded-readings")
+            click("行，读音：$xingReading"); await { editor.text.toString() == "行银行行" }
+            checkCandidateArea(false)
+            passed += "lookup_phrase_reading_in_row_and_existing_expanded_grid_ui"
+            click("w"); await { findText("编码：w") != null }
+            click("Z / 查读音"); click("q"); click("i"); click("n")
+            await { findButton("您，读音：nín") != null }
+            runOnMainSync { check(editor.text.toString() == "行银行行") }
+            click("a"); await { findText("编码：wqin") != null }
+            runOnMainSync { check(editor.text.toString() == "行银行行") }
+            click("您，读音：nín"); await { editor.text.toString() == "行银行行您" }
+            passed += "lookup_suspends_unique_four_code_and_fifth_code_until_manual_choice_ui"
+            click("a"); click("Z / 查读音"); await { findButton("Z / 查读音")?.isSelected == true }
+            click("⌫"); checkCandidateArea(false)
+            runOnMainSync { check(!findButtonOnMain("Z / 查读音").isSelected) }
+            click("Z / 查读音"); await { findText("编码：z") != null }
+            click("Z / 查读音"); await { findText("暂无候选可查读音") != null }
+            runOnMainSync { check(findTextOnMain("编码：z") != null && !findButtonOnMain("Z / 查读音").isSelected) }
+            click("⌫"); checkCandidateArea(false)
+            passed += "lookup_delete_to_idle_and_no_match_z_preserves_code_ui"
+            click("五笔86"); await { findButton("abc") != null }
+            click("z"); await { editor.text.toString() == "行银行行您z" }
+            click("换行"); click("abc"); await { findButton("五笔86") != null }
+            passed += "english_z_keeps_normal_letter_semantics_ui"
+            runOnMainSync { editor.setText("") }
             click("a"); await { findText("编码：a") != null }
             click("换行"); await { editor.text.toString() == "a" }
             click("换行"); await { editor.text.toString() == "a\n" }
@@ -344,12 +459,19 @@ class SmokeInstrumentation : Instrumentation() {
                 refreshKeyboard()
             }
             setEnterAction(WubiEnterAction.CLEAR_CODE)
+            click("Z / 查读音"); await { findText("编码：z") != null }
+            click("换行"); checkCandidateArea(false)
+            runOnMainSync { check(editor.text.toString() == "a\n") }
             click("a"); await { findText("编码：a") != null }
             click("换行"); checkCandidateArea(false)
             runOnMainSync { check(editor.text.toString() == "a\n") }
             click("换行"); await { editor.text.toString() == "a\n\n" }
             passed += "return_clear_code_preserves_editor_then_newline_ui"
             setEnterAction(WubiEnterAction.FIRST_CANDIDATE)
+            click("Z / 查读音"); await { findText("编码：z") != null }
+            click("换行"); await { findText("编码：z") != null }
+            runOnMainSync { check(editor.text.toString() == "a\n\n") }
+            click("⌫"); checkCandidateArea(false)
             click("a"); await { findText("编码：a") != null }
             click("换行"); await { editor.text.toString() == "a\n\n工" }
             val missingCode = LocalStore(targetContext).use { personal -> WubiRepository(targetContext, personal).use { repository ->
@@ -801,6 +923,12 @@ class SmokeInstrumentation : Instrumentation() {
         return found
     }
     // Called only from runOnMainSync; avoid nesting the instrumentation main-thread helper.
+    private fun findButtonOnMain(label: String): Button = windows().filterIsInstance<Button>().first {
+        visible(it) && (it.text.toString() == label || it.contentDescription?.toString() == label)
+    }
+    private fun findTextOnMain(label: String): TextView? = windows().filterIsInstance<TextView>().firstOrNull {
+        visible(it) && it.text.toString() == label
+    }
     private fun findKeyboardButton(char: Char): Button = windows().filterIsInstance<Button>().first { visible(it) && it.contentDescription == char.toString() }
     private fun awaitKeyCase(uppercase: Boolean) {
         await {

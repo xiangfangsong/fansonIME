@@ -168,10 +168,11 @@ class WubiEngineTest {
         assertTrue(e.select(20).commits.isEmpty())
         assertEquals("a", e.code)
     }
-    @Test fun reservedZCannotCorruptCode() {
+    @Test fun lookupZCannotCorruptCode() {
         val e = engine("a" to "工")
-        e.letter('a'); assertNotNull(e.letter('z').hint)
+        e.letter('a'); assertTrue(e.letter('z').commits.isEmpty())
         assertEquals("a", e.code)
+        assertTrue(e.showingReadings)
     }
     @Test fun prefixCompletionIsExplicitAndCannotTriggerFourCodeAutoCommit() {
         val e = WubiEngine(object : Lexicon {

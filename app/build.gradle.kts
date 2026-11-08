@@ -10,8 +10,8 @@ android {
         applicationId = "com.fanson.ime"
         minSdk = 31
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.1.9"
+        versionCode = 13
+        versionName = "0.2.0"
         testInstrumentationRunner = "com.fanson.ime.SmokeInstrumentation"
     }
     buildTypes {
@@ -25,6 +25,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    buildFeatures { buildConfig = true }
     lint { abortOnError = true; warningsAsErrors = false }
     testOptions { unitTests.isReturnDefaultValues = false }
 }

@@ -6,7 +6,9 @@
     "unicode-org/cldr": "e1d37acce5dae468c414172be53b666d58d45be8",
     "BYVoid/OpenCC": "556ed22496d650bd0b13b6c163be9814637970ae",
     "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6",
-    "riku-ri/wubi-kb": "c65590f6a524fa7cb9459d2095be87d22bd839fc"
+    "riku-ri/wubi-kb": "c65590f6a524fa7cb9459d2095be87d22bd839fc",
+    "mozillazg/pinyin-data": "fe29ad32bdf352b31a02b9936e537f575432e9a6",
+    "mozillazg/phrase-pinyin-data": "4afa3226ce53c9138b939e83c3bb294dbe0da511"
   },
   "assets": {
     "wubi86.db": "a42d340cb0e456ba96a348606778da443743abee13b536f80cd19af827925894",
@@ -14,9 +16,27 @@
     "traditional.tsv": "8e128e24cc56ae9bd1b72f1d43efd31a7128837e7c4a4c4fecb2ee92d9438147",
     "english.txt": "b4944ce250fb8e217308cb12cd840be1d519b437d08e2482cfa7989c80de532d",
     "fonts/fanson_wubi_roots.ttf": "8372f52d9af1b6a7a5d84e839a101280f02087062b366397d209570f475f7305",
-    "wubi_roots.json": "97326c0bca3ee7669d3f30315b366a639280ad1b6c0e5e474841a224f33a4905"
+    "wubi_roots.json": "97326c0bca3ee7669d3f30315b366a639280ad1b6c0e5e474841a224f33a4905",
+    "pronunciation.db": "73d9fe3744b72d96e23838c4189f6a014afb1fbf7ae3544cd8f17416ae4d622c"
   },
   "traditional_mappings": 53076,
   "english_words": 46717,
-  "wubi_root_forms": 258
+  "wubi_root_forms": 258,
+  "pronunciation": {
+    "characters": 44440,
+    "phrases": 80371,
+    "source_phrases": 47152,
+    "traditional_phrase_aliases": 33219,
+    "wubi_characters": 70391,
+    "wubi_characters_with_readings": 41467,
+    "wubi_characters_without_readings": 28924,
+    "missing_by_block": {
+      "Basic": 16,
+      "A": 797,
+      "B": 28087,
+      "C": 0,
+      "D": 0,
+      "E": 0
+    }
+  }
 }
