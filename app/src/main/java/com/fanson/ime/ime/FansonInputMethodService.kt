@@ -28,12 +28,15 @@ import com.fanson.ime.engine.InputEngine
 import com.fanson.ime.engine.EnglishEngine
 import com.fanson.ime.engine.EnglishLexicon
 import com.fanson.ime.engine.TraditionalConverter
+import com.fanson.ime.engine.InputLanguage
+import com.fanson.ime.engine.KoreanEngine
 import com.fanson.ime.keyboard.Palette
 import com.fanson.ime.keyboard.CandidateStrip
 import com.fanson.ime.keyboard.candidateButton
 import com.fanson.ime.keyboard.EmojiCategoryStrip
 import com.fanson.ime.keyboard.SymbolPanel
 import com.fanson.ime.keyboard.WubiRootCard
+import com.fanson.ime.keyboard.LanguagePopup
 import com.fanson.ime.keyboard.Ui
 import com.fanson.ime.keyboard.dp
 import com.fanson.ime.settings.MainActivity
@@ -50,6 +53,7 @@ class FansonInputMethodService : InputMethodService() {
     private var loadFailed = false
     private var engine: WubiEngine? = null // worker-confined
     private var englishEngine: EnglishEngine? = null // loaded on worker, then main-thread confined
+    private val koreanEngine = KoreanEngine() // main-thread confined
     private var repository: WubiRepository? = null
     private var pronunciation: PronunciationRepository? = null
     private var emoji: EmojiRepository? = null
@@ -64,7 +68,13 @@ class FansonInputMethodService : InputMethodService() {
     private var currentCode = ""
     private var showingReadings = false
     private var pronunciationKey: Button? = null
-    private var chinese = true
+    private var language = InputLanguage.WUBI
+    private val chinese get() = language == InputLanguage.WUBI
+    private val english get() = language == InputLanguage.ENGLISH
+    private val korean get() = language == InputLanguage.KOREAN
+    private var koreanShift = false
+    private var languagePopup: LanguagePopup? = null
+    private var globe: Button? = null
     private var uppercase = false
     private var traditional = false
     private var spelling = true
@@ -133,10 +143,10 @@ class FansonInputMethodService : InputMethodService() {
         invalidateSession()
         privateField = EditorPolicy.privateField(attribute)
         password = EditorPolicy.password(attribute.inputType)
-        chinese = !password && !EditorPolicy.numeric(attribute.inputType) &&
-            attribute.inputType and android.text.InputType.TYPE_MASK_VARIATION !in setOf(android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, android.text.InputType.TYPE_TEXT_VARIATION_URI)
+        val preferred = InputLanguage.fromPreference(store.get("input_language", "wubi86"))
+        language = EditorPolicy.initialLanguage(attribute.inputType, preferred)
         panel = if (EditorPolicy.numeric(attribute.inputType)) "numbers" else "keyboard"
-        uppercase = false
+        uppercase = false; koreanShift = false
         readSettings()
     }
 
@@ -152,6 +162,7 @@ class FansonInputMethodService : InputMethodService() {
         showRootHints = store.get("roots", "false").toBoolean()
         showNumberRow = store.get("number_row", "true").toBoolean()
         rootCard?.dismiss(); rootCard = null
+        languagePopup?.dismiss(); languagePopup = null
         if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) keyHeight = minOf(keyHeight, 40)
         ui = Ui(this, Palette.of(this, store.get("theme", "system")))
         val auto = store.get("auto_unique", "true").toBoolean()
@@ -163,6 +174,7 @@ class FansonInputMethodService : InputMethodService() {
 
     private fun invalidateSession() {
         rootCard?.dismiss()
+        languagePopup?.dismiss()
         session.incrementAndGet()
         releaseClip()
         cancelRepeat()
@@ -171,6 +183,7 @@ class FansonInputMethodService : InputMethodService() {
         emojiQuery = ""; emojiSearching = false; emojiPage = 0
         emojiCategoryStrip = null; emojiCategoryScrollX = 0
         englishEngine?.reset()
+        koreanEngine.reset(); koreanShift = false
         if (!destroyed && !worker.isShutdown) worker.execute { engine?.reset() }
     }
 
@@ -187,18 +200,22 @@ class FansonInputMethodService : InputMethodService() {
 
     /** SQL-backed Wubi runs on the worker. In-memory English mutates with its
      * composing edits on main, so cursor reports cannot split a queued word. */
-    private fun inputTask(wubi: Boolean, token: Long, operation: (InputEngine) -> Unit) {
+    private fun inputTask(mode: InputLanguage, token: Long, operation: (InputEngine) -> Unit) {
         val task = Runnable {
             if (destroyed || token != session.get()) return@Runnable
-            val e: InputEngine = (if (wubi) engine else englishEngine) ?: return@Runnable
+            val e: InputEngine = when (mode) {
+                InputLanguage.WUBI -> engine
+                InputLanguage.ENGLISH -> englishEngine
+                InputLanguage.KOREAN -> koreanEngine
+            } ?: return@Runnable
             operation(e)
         }
-        if (wubi) worker.execute(task) else task.run()
+        if (mode == InputLanguage.WUBI) worker.execute(task) else task.run()
     }
 
-    private fun publishInput(wubi: Boolean, token: Long, action: () -> Unit) {
+    private fun publishInput(mode: InputLanguage, token: Long, action: () -> Unit) {
         val task = Runnable { if (!destroyed && token == session.get()) action() }
-        if (wubi) main.post(task) else task.run()
+        if (mode == InputLanguage.WUBI) main.post(task) else task.run()
     }
 
     private fun enqueue(operation: (InputEngine) -> EngineResult, after: (() -> Unit)? = null) {
@@ -206,21 +223,25 @@ class FansonInputMethodService : InputMethodService() {
         if (!ready) { hint(if (loadFailed) "离线数据加载失败，请重新打开输入法" else "正在准备离线码表"); return }
         val token = session.get()
         val search = emojiSearching
-        val wubi = chinese
+        val mode = language
         val useTraditional = traditional && !search
         val useSpelling = spelling && !password
-        inputTask(wubi, token) { e ->
+        inputTask(mode, token) { e ->
             if (e is WubiEngine) e.traditionalMode = useTraditional
             if (e is EnglishEngine) e.enabled = useSpelling
             val result = operation(e)
             val code = e.code
             val candidates = e.candidates.toList()
             val readings = (e as? WubiEngine)?.showingReadings == true
-            publishInput(wubi, token) {
-                result.commits.forEach { if (search) emojiQuery += it else commitText(it) }
-                result.composing?.let { currentInputConnection?.setComposingText(it, 1) }
-                currentCode = code; candidateSnapshot = candidates; expanded = false
-                showingReadings = readings
+            publishInput(mode, token) {
+                // A syllable boundary commits its prefix and composes the next
+                // syllable together. Intermediate cursor callbacks must not reset it.
+                editorBatch {
+                    result.commits.forEach { if (search) emojiQuery += it else commitText(it) }
+                    result.composing?.let { currentInputConnection?.setComposingText(it, 1) }
+                    currentCode = code; candidateSnapshot = candidates; expanded = false
+                    showingReadings = readings
+                }
                 renderCandidates()
                 result.hint?.let { hint(it) }
                 if (search && result.commits.isNotEmpty()) { emojiPage = 0; renderBody() }
@@ -230,6 +251,11 @@ class FansonInputMethodService : InputMethodService() {
     }
 
     private fun resolveThen(action: () -> Unit) { enqueue({ it.resolve() }, action) }
+    private fun editorBatch(action: () -> Unit) {
+        val connection = currentInputConnection
+        connection?.beginBatchEdit()
+        try { action() } finally { connection?.endBatchEdit() }
+    }
     private fun commitText(text: String): Boolean {
         val connection = currentInputConnection ?: return false
         connection.beginBatchEdit()
@@ -237,33 +263,39 @@ class FansonInputMethodService : InputMethodService() {
     }
     private fun letter(char: Char) {
         rootCard?.dismiss()
+        languagePopup?.dismiss()
         vibrate()
-        val typed = if (!chinese && uppercase) char.uppercaseChar() else char
+        val resetShift = korean && koreanShift
+        val typed = if ((english && uppercase) || resetShift) char.uppercaseChar() else char
         enqueue({ it.letter(typed) })
+        if (resetShift) { koreanShift = false; renderBody() }
     }
-    private fun punct(text: String) { rootCard?.dismiss(); vibrate(); enqueue({ it.punctuation(text) }) }
-    private fun space() { rootCard?.dismiss(); vibrate(); enqueue({ it.space() }) }
+    private fun punct(text: String) { rootCard?.dismiss(); languagePopup?.dismiss(); vibrate(); enqueue({ it.punctuation(text) }) }
+    private fun space() { rootCard?.dismiss(); languagePopup?.dismiss(); vibrate(); enqueue({ it.space() }) }
     private fun deleteKey() {
         rootCard?.dismiss()
+        languagePopup?.dismiss()
         vibrate()
         if (destroyed || !ready) return
         val token = session.get()
         val search = emojiSearching
-        val wubi = chinese
-        inputTask(wubi, token) { e ->
+        val mode = language
+        inputTask(mode, token) { e ->
             val removedCode = e.backspace()
             val code = e.code; val candidates = e.candidates.toList()
             val readings = (e as? WubiEngine)?.showingReadings == true
-            publishInput(wubi, token) {
-                if (!removedCode) {
-                    if (search) { emojiQuery = dropLastCluster(emojiQuery); emojiPage = 0; renderBody() }
-                    else deleteEditorCluster()
+            publishInput(mode, token) {
+                editorBatch {
+                    if (!removedCode) {
+                        if (search) { emojiQuery = dropLastCluster(emojiQuery); emojiPage = 0; renderBody() }
+                        else deleteEditorCluster()
+                    }
+                    else if (mode != InputLanguage.WUBI) {
+                        currentInputConnection?.setComposingText(code, 1)
+                        if (code.isEmpty()) currentInputConnection?.finishComposingText()
+                    }
+                    currentCode = code; candidateSnapshot = candidates; showingReadings = readings
                 }
-                else if (!wubi) {
-                    currentInputConnection?.setComposingText(code, 1)
-                    if (code.isEmpty()) currentInputConnection?.finishComposingText()
-                }
-                currentCode = code; candidateSnapshot = candidates; showingReadings = readings
                 expanded = false; renderCandidates()
             }
         }
@@ -297,18 +329,19 @@ class FansonInputMethodService : InputMethodService() {
 
     private fun enter() {
         rootCard?.dismiss()
+        languagePopup?.dismiss()
         if (destroyed || !ready) return
         vibrate()
         val token = session.get()
         val search = emojiSearching
-        val wubi = chinese
-        inputTask(wubi, token) { e ->
+        val mode = language
+        inputTask(mode, token) { e ->
             val hadCode = e.code.isNotEmpty()
             val result = e.enter()
             val code = e.code
             val candidates = e.candidates.toList()
             val readings = (e as? WubiEngine)?.showingReadings == true
-            publishInput(wubi, token) {
+            publishInput(mode, token) {
                 result.commits.forEach { if (search) emojiQuery += it else commitText(it) }
                 currentCode = code; candidateSnapshot = candidates
                 showingReadings = readings
@@ -317,7 +350,7 @@ class FansonInputMethodService : InputMethodService() {
                 result.hint?.let { hint(it) }
                 if (wasExpanded) renderBody()
                 if (search) { emojiPage = 0; renderBody() }
-                else if (!hadCode) {
+                else if (mode == InputLanguage.KOREAN || !hadCode) {
                     val info = currentInputEditorInfo
                     val action = (info?.imeOptions ?: 0) and EditorInfo.IME_MASK_ACTION
                     val noAction = (info?.imeOptions ?: 0) and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0
@@ -341,6 +374,7 @@ class FansonInputMethodService : InputMethodService() {
             session.incrementAndGet()
             currentCode = ""; candidateSnapshot = emptyList(); expanded = false
             englishEngine?.reset()
+            koreanEngine.reset()
             if (!destroyed) { renderCandidates(); renderBody() }
         }
     }
@@ -348,19 +382,23 @@ class FansonInputMethodService : InputMethodService() {
     private fun render() {
         if (destroyed) return
         rootCard?.dismiss(); rootCard = null
+        languagePopup?.dismiss(); languagePopup = null
         val container = root ?: return
         if (!::ui.isInitialized) return
         rememberEmojiCategoryPosition()
         cancelRepeat()
         container.removeAllViews(); container.setBackgroundColor(ui.palette.background)
         container.setPadding(dp(3), dp(4), dp(3), dp(4))
+        val header = ui.row().apply { contentDescription = "键盘顶部" }
+        globe = ui.iconButton(R.drawable.ic_globe, "切换语言") { showLanguages() }.apply {
+            isEnabled = ready
+            stateDescription = language.label + if (privateField) "，隐私输入" else ""
+        }.also { header.addView(it, LinearLayout.LayoutParams(dp(44), dp(40)).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) }) }
         val tools = ui.row().apply { contentDescription = "功能按钮栏" }
         toolbar = tools
-        fun tool(label: String, action: () -> Unit) { ui.addWeighted(tools, ui.button(label, action = action).apply { textSize = 12f; isEnabled = ready }, height = 40) }
         fun icon(icon: Int, description: String, action: () -> Unit) {
             ui.addWeighted(tools, ui.iconButton(icon, description, action = action), height = 40)
         }
-        tool(if (privateField) "隐私" else if (chinese) "五笔86" else if (uppercase) "ABC" else "abc") { toggleMode() }
         icon(R.drawable.ic_clipboard, "剪贴板") { switchPanel("clipboard") }
         icon(R.drawable.ic_symbols, "符号") { switchPanel("symbols") }
         icon(R.drawable.ic_emoji, "表情") { if (password) hint("密码框不显示 emoji 推荐") else switchPanel("emoji") }
@@ -368,11 +406,12 @@ class FansonInputMethodService : InputMethodService() {
             resolveThen { requestHideSelf(0); startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
         icon(R.drawable.ic_hide, "收起键盘") { requestHideSelf(0) }
-        container.addView(tools, LinearLayout.LayoutParams(-1, dp(44)))
+        header.addView(tools, LinearLayout.LayoutParams(0, dp(44), 1f))
         candidateRow = CandidateStrip(ui, ::select, { setCandidatesExpanded(true) }, { setCandidatesExpanded(false) }) { overflow ->
             if (!overflow && expanded) setCandidatesExpanded(false)
         }
-        container.addView(candidateRow, LinearLayout.LayoutParams(-1, dp(44)))
+        header.addView(candidateRow, LinearLayout.LayoutParams(0, dp(44), 1f))
+        container.addView(header, LinearLayout.LayoutParams(-1, dp(44)))
         body = ui.column()
         container.addView(body)
         renderCandidates(); renderBody()
@@ -380,7 +419,7 @@ class FansonInputMethodService : InputMethodService() {
 
     private fun renderCandidates() {
         val inputPanel = panel == "keyboard" || (panel == "emoji" && emojiSearching)
-        val showCandidates = inputPanel && currentCode.isNotEmpty() && !password && (chinese || spelling)
+        val showCandidates = inputPanel && currentCode.isNotEmpty() && !password && (chinese || (english && spelling))
         toolbar?.visibility = if (showCandidates) View.GONE else View.VISIBLE
         candidateRow?.visibility = if (showCandidates) View.VISIBLE else View.GONE
         val row = candidateRow ?: return
@@ -430,17 +469,32 @@ class FansonInputMethodService : InputMethodService() {
         }
     }
 
-    private fun toggleMode() {
+    private fun showLanguages() {
+        val anchor = globe ?: return
+        rootCard?.dismiss()
+        val popup = languagePopup ?: LanguagePopup(ui).also { languagePopup = it }
+        if (popup.isShowing) popup.dismiss() else popup.show(anchor, language, ::chooseLanguage)
+    }
+
+    private fun chooseLanguage(next: InputLanguage) {
+        if (next == language) return
         resolveThen {
-            chinese = !chinese; uppercase = false; emojiSearching = false; emojiQuery = ""
-            emojiCategoryStrip = null; emojiCategoryScrollX = 0
+            invalidateSession()
+            language = next; uppercase = false
+            store.put("input_language", next.value)
             leaveClipboard(); panel = "keyboard"; render()
         }
     }
     private fun shift() {
         vibrate()
-        if (chinese) {
-            enqueue({ if (it is WubiEngine) it.enter(WubiEnterAction.COMMIT_CODE) else it.enter() }, after = { chinese = false; uppercase = true; render() })
+        languagePopup?.dismiss()
+        if (korean) {
+            koreanShift = !koreanShift; renderBody()
+        } else if (chinese) {
+            enqueue({ if (it is WubiEngine) it.enter(WubiEnterAction.COMMIT_CODE) else it.enter() }, after = {
+                language = InputLanguage.ENGLISH; uppercase = true
+                store.put("input_language", language.value); render()
+            })
         } else {
             uppercase = !uppercase
             render()
@@ -479,17 +533,19 @@ class FansonInputMethodService : InputMethodService() {
             val row = ui.row()
             if (index == 1) row.setPadding(dp(14), 0, dp(14), 0)
             if (index == 2) ui.addWeighted(row, ui.iconButton(
-                if (uppercase && !chinese) R.drawable.ic_caps else R.drawable.ic_shift,
-                "切换大小写", action = { shift() }
-            ), 1.25f, keyHeight)
+                if ((uppercase && english) || (korean && koreanShift)) R.drawable.ic_caps else R.drawable.ic_shift,
+                if (korean) "韩语上档" else "切换大小写", accent = korean && koreanShift, action = { shift() }
+            ).apply { isSelected = korean && koreanShift }, 1.25f, keyHeight)
             chars.forEach { char ->
-                val label = if (chinese || uppercase) char.uppercase() else char.toString()
+                val label = if (korean) KoreanEngine.keyLabel(if (koreanShift) char.uppercaseChar() else char).toString()
+                    else if (chinese || uppercase) char.uppercase() else char.toString()
                 val key = if (chinese && char == 'z') ui.iconButton(R.drawable.ic_pronunciation_lookup, "Z / 查读音", showingReadings) {
                     letter('z')
                 }.also { pronunciationKey = it }
                 else ui.button(label + if (showRoots && rootHints[char] != null) "\n${rootHints[char]}" else "") { letter(char) }
                 key.textSize = if (showRoots) 14f else 20f
-                if (!chinese || char != 'z') key.contentDescription = char.toString()
+                key.tag = char.toString()
+                if (!chinese || char != 'z') key.contentDescription = if (korean) label else char.toString()
                 if (showRoots && char in 'a'..'y') key.setOnLongClickListener {
                     vibrate()
                     (rootCard ?: WubiRootCard(ui).also { rootCard = it }).show(key, char)
@@ -503,7 +559,10 @@ class FansonInputMethodService : InputMethodService() {
         }
         val bottom = ui.row()
         ui.addWeighted(bottom, ui.button("123") { switchPanel("numbers") }, 1.1f, keyHeight)
-        val languageKey = if (chinese) ui.button(if (traditional && !emojiSearching) "繁" else "简") {
+        val languageKey = if (korean) ui.button("한/漢") {}.apply {
+            isEnabled = false; alpha = .55f
+            contentDescription = "한/漢（暂未开放）"
+        } else if (chinese) ui.button(if (traditional && !emojiSearching) "繁" else "简") {
             if (emojiSearching) hint("表情搜索使用简体关键词")
             else {
                 traditional = !traditional
@@ -520,7 +579,7 @@ class FansonInputMethodService : InputMethodService() {
         }.apply { isSelected = spelling && !password; isEnabled = !password }
         ui.addWeighted(bottom, languageKey, 1.2f, keyHeight)
         ui.addWeighted(bottom, ui.button(if (chinese) "，" else ",") { punct(if (chinese) "，" else ",") }, .8f, keyHeight)
-        val space = ui.button(if (emojiSearching) "搜索词" else "空格") { space() }
+        val space = spaceButton()
         space.setOnLongClickListener { showCursorControls(); true }
         ui.addWeighted(bottom, space, 3.3f, keyHeight)
         ui.addWeighted(bottom, ui.button(if (chinese) "。" else ".") { punct(if (chinese) "。" else ".") }, .8f, keyHeight)
@@ -583,7 +642,7 @@ class FansonInputMethodService : InputMethodService() {
         val row = ui.row()
         ui.addWeighted(row, ui.button("返回键盘") { switchPanel("symbols") }, height = 44)
         ui.addWeighted(row, deleteButton(), height = 44)
-        ui.addWeighted(row, ui.button("空格") { space() }, height = 44)
+        ui.addWeighted(row, spaceButton(), height = 44)
         ui.addWeighted(row, enterButton(), height = 44)
         container.addView(row)
     }
@@ -615,8 +674,8 @@ class FansonInputMethodService : InputMethodService() {
         val repo = emoji ?: return
         val header = ui.row()
         ui.addWeighted(header, ui.button("‹ 键盘") { switchPanel("emoji") }.apply { textSize = 12f }, 1f, 40)
-        ui.addWeighted(header, ui.button(if (emojiSearching) "关键词：${emojiQuery.ifEmpty { "输入中文" }}" else "五笔搜索 emoji") {
-            resolveThen { emojiSearching = !emojiSearching; chinese = true; renderBody(); renderCandidates() }
+        if (chinese) ui.addWeighted(header, ui.button(if (emojiSearching) "关键词：${emojiQuery.ifEmpty { "输入中文" }}" else "五笔搜索 emoji") {
+            resolveThen { emojiSearching = !emojiSearching; renderBody(); renderCandidates() }
         }.apply { textSize = 13f }, 3f, 40)
         if (emojiQuery.isNotEmpty()) ui.addWeighted(header, ui.button("清空") { resolveThen { emojiQuery = ""; emojiPage = 0; renderBody() } }.apply { textSize = 12f }, 1f, 40)
         container.addView(header)
@@ -679,6 +738,17 @@ class FansonInputMethodService : InputMethodService() {
                 currentCode = ""; candidateSnapshot = emptyList(); renderCandidates()
             }
         }
+    }
+
+    private fun spaceButton() = ui.button("␣ ${language.label}") { space() }.apply {
+        contentDescription = "空格"; stateDescription = language.label
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && languagePopup?.isShowing == true) {
+            languagePopup?.dismiss(); return true
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     private fun captureClipboard(): ClipboardSnapshot? {

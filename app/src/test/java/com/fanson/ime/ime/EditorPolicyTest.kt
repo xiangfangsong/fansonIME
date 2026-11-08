@@ -3,8 +3,21 @@ package com.fanson.ime.ime
 import android.text.InputType
 import org.junit.Assert.*
 import org.junit.Test
+import com.fanson.ime.engine.InputLanguage
 
 class EditorPolicyTest {
+    @Test fun ordinaryTextRespectsTheLastChosenLanguage() {
+        for (language in InputLanguage.entries) assertEquals(language, EditorPolicy.initialLanguage(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE, language))
+    }
+    @Test fun latinAndNumericFieldsOverrideWithoutChangingThePreferredLanguage() {
+        for (type in listOf(InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)) {
+            assertEquals(InputLanguage.ENGLISH, EditorPolicy.initialLanguage(type, InputLanguage.KOREAN))
+        }
+    }
     @Test fun detectsAllPasswordVariationsWithoutTreatingPlainTextAsPassword() {
         listOf(InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD, InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD).forEach {
             assertTrue(EditorPolicy.password(InputType.TYPE_CLASS_TEXT or it))

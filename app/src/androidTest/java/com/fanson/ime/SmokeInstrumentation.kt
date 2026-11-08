@@ -18,6 +18,7 @@ import com.fanson.ime.data.LocalStore
 import com.fanson.ime.data.WubiRepository
 import com.fanson.ime.data.PronunciationRepository
 import com.fanson.ime.emoji.EmojiRepository
+import com.fanson.ime.engine.InputLanguage
 import com.fanson.ime.engine.Candidate
 import com.fanson.ime.engine.TraditionalConverter
 import com.fanson.ime.engine.EnglishLexicon
@@ -40,6 +41,7 @@ class SmokeInstrumentation : Instrumentation() {
     override fun onStart() {
         try {
             val store = LocalStore(targetContext)
+            store.put("input_language", "wubi86")
             store.put("wubi_enter_action", "commit_code")
             store.put("number_row", "true")
             store.put("roots", "false")
@@ -202,7 +204,7 @@ class SmokeInstrumentation : Instrumentation() {
                 check(editor.inputType and android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0)
             }
             passed += "local_trial_multiline_top_start_alignment"
-            val enterSpinner = allViews(activity.window.decorView).filterIsInstance<android.widget.Spinner>().first { it.contentDescription == "回车键功能" }
+            val enterSpinner = allViews(activity.window.decorView).filterIsInstance<android.widget.Spinner>().first { it.contentDescription == "五笔回车键功能" }
             runOnMainSync { check((0 until enterSpinner.count).map { enterSpinner.getItemAtPosition(it).toString() } == listOf("上屏五笔编码", "清除五笔编码", "上屏首个候选")) }
             screenshot("18-local-trial-settings")
             runOnMainSync { editor.requestFocus() }
@@ -245,12 +247,12 @@ class SmokeInstrumentation : Instrumentation() {
                 check(settings.parent === hide.parent && settings.x < hide.x)
             }
             passed += "vector_toolbar_enter_hide_layout"
-            await { findButton("五笔86")?.isEnabled == true }
+            await { findButton("切换语言")?.isEnabled == true }
             fun refreshKeyboard() {
                 runOnMainSync { manager.hideSoftInputFromWindow(editor.windowToken, 0) }
                 await { findButton("退格") == null }
                 runOnMainSync { manager.restartInput(editor); manager.showSoftInput(editor, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
-                await { findButton("剪贴板") != null && findButton("五笔86")?.isEnabled == true }
+                await { findButton("剪贴板") != null && findButton("切换语言")?.isEnabled == true }
             }
             fun setToggle(label: String, checked: Boolean) {
                 runOnMainSync { allViews(activity.window.decorView).filterIsInstance<android.widget.Switch>().first { it.text.toString() == label }.isChecked = checked }
@@ -264,13 +266,164 @@ class SmokeInstrumentation : Instrumentation() {
                     if (shown) check((0 until rows.single().childCount).map { (rows.single().getChildAt(it) as Button).text.toString() } == "1234567890".map { it.toString() })
                 }
             }
+            click("切换语言")
+            runOnMainSync {
+                val menu = windows().filterIsInstance<android.widget.LinearLayout>().first { visible(it) && it.contentDescription == "输入语言列表" }
+                val items = (0 until menu.childCount).map { menu.getChildAt(it) as Button }
+                check(items.map { it.text.toString() } == listOf("English", "五笔86", "한국어"))
+                check(items.map { it.isSelected } == listOf(false, true, false))
+            }
+            screenshot("31-language-selector")
+            click("五笔86")
+            chooseLanguage(InputLanguage.KOREAN)
+            checkCandidateArea(false); checkNumberRow(true)
+            runOnMainSync {
+                "qwertyuiopasdfghjklzxcvbnm".forEach { key ->
+                    val button = findKeyboardButton(key)
+                    check(button.text.toString() == com.fanson.ime.engine.KoreanEngine.keyLabel(key).toString())
+                    check(!button.isLongClickable)
+                }
+                check(!findButtonOnMain("한/漢（暂未开放）").isEnabled)
+                check(findButtonOnMain("␣ 한국어").contentDescription == "空格")
+                check(windows().filterIsInstance<Button>().none { visible(it) && it.contentDescription == "Z / 查读音" })
+            }
+            passed += "fixed_language_menu_order_current_check_globe_korean_pc_layout_and_placeholder"
+            fun koreanKeys(keys: String, burst: Boolean = false) {
+                if (burst) runOnMainSync { keys.forEach { findKeyboardButton(it).performClick() } }
+                else keys.forEach { key ->
+                    if (key.isUpperCase()) click("韩语上档")
+                    runOnMainSync { findKeyboardButton(key.lowercaseChar()).performClick() }
+                    waitForIdleSync()
+                }
+            }
+            koreanKeys("g"); await { editor.text.toString() == "ㅎ" }
+            koreanKeys("k"); await { editor.text.toString() == "하" }
+            koreanKeys("s"); await { editor.text.toString() == "한" }
+            checkCandidateArea(false)
+            runOnMainSync { check(android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) >= 0) }
+            screenshot("32-korean-composition")
+            for (expected in listOf("하", "ㅎ", "")) { click("退格"); await { editor.text.toString() == expected } }
+            runOnMainSync { check(android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0) }
+            passed += "korean_live_composition_jamo_backspace_and_toolbar_without_candidates"
+            koreanKeys("gksrmf"); await { editor.text.toString() == "한글" }
+            click("空格"); await { editor.text.toString() == "한글 " }
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            koreanKeys("rksk"); await { editor.text.toString() == "가나" }
+            click("空格"); koreanKeys("ekfrk"); await { editor.text.toString() == "가나 달가" }
+            click("空格"); koreanKeys("rkqtk"); await { editor.text.toString() == "가나 달가 갑사" }
+            passed += "korean_words_simple_and_compound_final_resyllabification_ui"
+            click("空格"); koreanKeys("Rk"); await { editor.text.toString().endsWith(" 까") }
+            runOnMainSync { check(findKeyboardButton('r').text.toString() == "ㄱ" && !findButtonOnMain("韩语上档").isSelected) }
+            click("空格"); koreanKeys("rhk"); await { editor.text.toString().endsWith(" 까 과") }
+            passed += "korean_shift_one_shot_and_compound_vowels_ui"
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            koreanKeys("dkssudgktpdy", burst = true)
+            await { editor.text.toString() == "안녕하세요" }
+            screenshot("33-korean-word")
+            passed += "korean_fast_typing_preserves_full_word_and_composing_cursor_callbacks"
+            for (action in WubiEnterAction.entries) {
+                runOnMainSync { editor.setText(""); enterSpinner.setSelection(WubiEnterAction.entries.indexOf(action)) }
+                await { LocalStore(targetContext).use { it.get("wubi_enter_action", "") == action.value } }
+                refreshKeyboard()
+                koreanKeys("gks"); click("换行")
+                await { editor.text.toString() == "한\n" }
+                runOnMainSync { check(android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0) }
+            }
+            passed += "korean_return_confirms_and_newlines_once_independent_of_all_wubi_return_settings"
+            val koreanInputType = editor.inputType
+            val koreanImeOptions = editor.imeOptions
+            var sent = 0
+            runOnMainSync {
+                editor.setText(""); editor.setSingleLine(true)
+                editor.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+                editor.setOnEditorActionListener { _, action, _ -> if (action == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sent++; true } else false }
+                manager.restartInput(editor)
+            }
+            await { findButton("发送") != null && findButton("␣ 한국어") != null }
+            koreanKeys("gks"); click("发送"); await { sent == 1 && editor.text.toString() == "한" }
+            runOnMainSync {
+                check(android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0)
+                editor.setOnEditorActionListener(null)
+                editor.setSingleLine(false); editor.inputType = koreanInputType; editor.imeOptions = koreanImeOptions
+                editor.setText(""); manager.restartInput(editor)
+            }
+            await { findButton("换行") != null && findButton("␣ 한국어") != null }
+            passed += "korean_send_confirms_then_performs_editor_action_with_one_press"
+            koreanKeys("gks"); chooseLanguage(InputLanguage.KOREAN)
+            koreanKeys("k"); await { editor.text.toString() == "하나" }
+            chooseLanguage(InputLanguage.ENGLISH); await { editor.text.toString() == "하나" }
+            "app".forEach { click(it.toString()) }
+            chooseLanguage(InputLanguage.KOREAN); await { editor.text.toString() == "하나app" }
+            koreanKeys("gks"); chooseLanguage(InputLanguage.WUBI); await { editor.text.toString() == "하나app한" }
+            passed += "same_language_menu_keeps_composition_and_cross_language_switch_confirms_once"
+            runOnMainSync { editor.setText("") }
+            click("a"); await { findText("编码：a") != null }
+            click("切换语言"); runOnMainSync { check(editor.text.isEmpty()) }
+            screenshot("34-selector-during-wubi-composition")
+            click("English"); await { findButton("␣ English") != null && editor.text.toString() == "工" }
+            chooseLanguage(InputLanguage.WUBI)
+            val switchingNoMatch = LocalStore(targetContext).use { personal -> WubiRepository(targetContext, personal).use { repo -> listOf("yyyy", "abcd", "qwer", "yxyx", "xxyy").first { repo.lookup(it).isEmpty() } } }
+            switchingNoMatch.forEach { click(it.toString()) }
+            click("切换语言"); click("한국어")
+            await { findText("编码：$switchingNoMatch") != null }
+            check(findButton("␣ 五笔86") != null)
+            repeat(switchingNoMatch.length) { click("退格") }
+            passed += "globe_stays_available_during_candidates_and_unmatched_language_switch_preserves_code"
+            chooseLanguage(InputLanguage.KOREAN)
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            koreanKeys("gks"); runOnMainSync { editor.setSelection(0) }
+            await { android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0 }
+            koreanKeys("r"); await { editor.text.toString() == "ㄱ한" }
+            click("123"); click("1"); click("返回")
+            await { findButton("␣ 한국어") != null && editor.text.toString() == "ㄱ1한" }
+            passed += "korean_cursor_move_ends_composition_and_numeric_panel_preserves_language"
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            koreanKeys("gks"); click("切换语言")
+            uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            await {
+                var closed = false
+                runOnMainSync { closed = windows().none { visible(it) && it.contentDescription == "输入语言列表" } }
+                closed && findButton("␣ 한국어") != null
+            }
+            koreanKeys("k"); await { editor.text.toString() == "하나" }
+            runOnMainSync { editor.setSelection(0, editor.length()) }
+            await { android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0 }
+            koreanKeys("gks"); await { editor.text.toString() == "한" }
+            runOnMainSync { targetContext.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("korean-test", "붙여넣기")) }
+            click("剪贴板"); await { findButton("粘贴到输入框")?.isEnabled == true }
+            click("粘贴到输入框"); await { editor.text.toString() == "한붙여넣기" }
+            click("‹ 返回键盘"); await { findButton("␣ 한국어") != null }
+            click("符号"); await { findButton("返回键盘") != null }
+            click("+"); click("返回键盘")
+            await { findButton("␣ 한국어") != null && editor.text.toString() == "한붙여넣기+" }
+            passed += "korean_popup_back_cancel_selection_replace_clipboard_paste_and_symbol_return"
+            for (mode in listOf(InputLanguage.KOREAN, InputLanguage.ENGLISH)) {
+                chooseLanguage(mode)
+                click("表情"); await { findButton("😀") != null }
+                check(findButton("五笔搜索 emoji") == null)
+                click("😀"); click("‹ 键盘")
+                await { findButton("␣ ${mode.label}") != null }
+            }
+            passed += "english_and_korean_emoji_browsing_hides_search_and_keeps_language"
+            chooseLanguage(InputLanguage.KOREAN)
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            check(findButton("␣ 한국어") != null)
+            runOnMainSync { editor.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD; manager.restartInput(editor) }
+            await { findButton("␣ English") != null }
+            LocalStore(targetContext).use { check(it.get("input_language", "") == "korean") }
+            runOnMainSync { editor.inputType = koreanInputType; manager.restartInput(editor) }
+            await { findButton("␣ 한국어") != null }
+            passed += "remembered_language_survives_reopen_and_temporary_password_english_override"
+            chooseLanguage(InputLanguage.WUBI)
+            LocalStore(targetContext).use { it.clearEmojiUsage() }
+            runOnMainSync { editor.setText(""); enterSpinner.setSelection(0) }; refreshKeyboard()
             checkCandidateArea(false)
             var idleKeyboardHeight = 0
-            runOnMainSync { idleKeyboardHeight = (windows().filterIsInstance<CandidateStrip>().first { it.isAttachedToWindow && (it.parent as View).isShown }.parent as View).height }
+            runOnMainSync { idleKeyboardHeight = ((windows().filterIsInstance<CandidateStrip>().first { it.isAttachedToWindow && (it.parent as View).isShown }.parent as View).parent as View).height }
             screenshot("25-idle-toolbar")
             click("a"); await { findText("编码：a") != null }
             checkCandidateArea(true)
-            runOnMainSync { check((windows().filterIsInstance<CandidateStrip>().first { visible(it) }.parent as View).height == idleKeyboardHeight) }
+            runOnMainSync { check(((windows().filterIsInstance<CandidateStrip>().first { visible(it) }.parent as View).parent as View).height == idleKeyboardHeight) }
             screenshot("26-wubi-single-header")
             click("退格"); checkCandidateArea(false)
             click("a"); await { findButton("工") != null }; click("工")
@@ -284,7 +437,7 @@ class SmokeInstrumentation : Instrumentation() {
             click("换行"); await { editor.text.toString() == noMatch }; checkCandidateArea(false)
             runOnMainSync { editor.setText("") }
             passed += "unmatched_code_keeps_single_candidate_header_until_resolved"
-            click("五笔86"); await { findButton("abc") != null }
+            chooseLanguage(InputLanguage.ENGLISH); await { findButton("␣ English") != null }
             "app".forEach { click(it.toString()) }; await { findText("英文：app") != null }
             checkCandidateArea(true)
             screenshot("27-english-single-header")
@@ -296,7 +449,7 @@ class SmokeInstrumentation : Instrumentation() {
             click("自动拼写已关闭"); await { findButton("自动拼写已开启") != null }
             "qzz".forEach { click(it.toString()) }; await { findText("英文：qzz") != null }; checkCandidateArea(true)
             repeat(3) { click("退格") }; checkCandidateArea(false)
-            click("abc"); await { findButton("五笔86") != null }
+            chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }
             runOnMainSync { editor.setText("") }
             passed += "english_header_follows_composition_and_spelling_toggle"
             checkNumberRow(true)
@@ -304,18 +457,18 @@ class SmokeInstrumentation : Instrumentation() {
             await { editor.text.toString() == "1234567890" }
             runOnMainSync { "qwertyuiop".forEach { check(!findKeyboardButton(it).isLongClickable) } }
             passed += "number_row_default_order_wubi_input_and_removed_long_press_digits"
-            click("五笔86"); await { findButton("abc") != null }
+            chooseLanguage(InputLanguage.ENGLISH); await { findButton("␣ English") != null }
             checkNumberRow(true)
             "1234567890".forEach { click(it.toString()) }
             click("z"); click("换行")
             await { editor.text.toString() == "12345678901234567890z" }
-            click("abc"); await { findButton("五笔86") != null }
+            chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }
             runOnMainSync { editor.setText("") }
             setToggle("显示顶部数字行", false)
             checkNumberRow(false)
             LocalStore(targetContext).use { check(it.get("number_row", "true") == "false") }
-            click("五笔86"); await { findButton("abc") != null }; checkNumberRow(false)
-            click("abc"); await { findButton("五笔86") != null }
+            chooseLanguage(InputLanguage.ENGLISH); await { findButton("␣ English") != null }; checkNumberRow(false)
+            chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }
             setToggle("显示顶部数字行", true)
             checkNumberRow(true)
             passed += "number_row_setting_persists_both_modes"
@@ -355,9 +508,9 @@ class SmokeInstrumentation : Instrumentation() {
             screenshot("20-n-full-roots")
             click("1"); await { findText("N 键 · 五笔86字根") == null && editor.text.toString() == "a1" }
             passed += "root_cards_complete_shapes_no_input_preserve_code_close_on_typing"
-            click("五笔86"); await { findButton("abc") != null }
+            chooseLanguage(InputLanguage.ENGLISH); await { findButton("␣ English") != null }
             runOnMainSync { check(!findKeyboardButton('q').isLongClickable) }
-            click("abc"); await { findButton("五笔86") != null }
+            chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }
             setToggle("字母键显示字根提示", false)
             runOnMainSync { check(!findKeyboardButton('q').isLongClickable) }
             click("Z / 查读音")
@@ -444,9 +597,9 @@ class SmokeInstrumentation : Instrumentation() {
             runOnMainSync { check(findTextOnMain("编码：z") != null && !findButtonOnMain("Z / 查读音").isSelected) }
             click("⌫"); checkCandidateArea(false)
             passed += "lookup_delete_to_idle_and_no_match_z_preserves_code_ui"
-            click("五笔86"); await { findButton("abc") != null }
+            chooseLanguage(InputLanguage.ENGLISH); await { findButton("␣ English") != null }
             click("z"); await { editor.text.toString() == "行银行行您z" }
-            click("换行"); click("abc"); await { findButton("五笔86") != null }
+            click("换行"); chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }
             passed += "english_z_keeps_normal_letter_semantics_ui"
             runOnMainSync { editor.setText("") }
             click("a"); await { findText("编码：a") != null }
@@ -485,20 +638,20 @@ class SmokeInstrumentation : Instrumentation() {
             passed += "return_first_candidate_and_missing_code_correction_ui"
             setEnterAction(WubiEnterAction.COMMIT_CODE)
             runOnMainSync { editor.setText("") }
-            click("切换大小写"); await { findButton("ABC") != null }
+            click("切换大小写"); await { findButton("␣ English") != null }
             click("a"); await { editor.text.toString() == "A" }
             click("切换大小写"); awaitKeyCase(false)
             click("b"); await { editor.text.toString() == "Ab" }
             click("切换大小写"); awaitKeyCase(true)
             click("c"); await { editor.text.toString() == "AbC" }
             click("换行")
-            click("ABC"); await { findButton("五笔86") != null }
+            chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }
             passed += "shift_upper_lower_mode_return_ui"
             click("d"); await { findText("编码：d") != null }
-            click("切换大小写"); await { findButton("ABC") != null && editor.text.toString() == "AbCd" }
+            click("切换大小写"); await { findButton("␣ English") != null && editor.text.toString() == "AbCd" }
             click("a"); await { editor.text.toString() == "AbCdA" }
             click("换行")
-            click("ABC"); await { findButton("五笔86") != null }
+            chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }
             passed += "shift_pending_code_as_raw_letters_ui"
             runOnMainSync { editor.setText("") }
             screenshot("01-keyboard")
@@ -518,9 +671,9 @@ class SmokeInstrumentation : Instrumentation() {
             await { editor.text.toString() == "+-*/_" }
             screenshot("23-number-panel")
             click("返回"); await { findButton("简") != null }
-            click("五笔86"); await { findButton("abc") != null }
-            click("123"); click("返回"); await { findButton("abc") != null }
-            click("abc"); await { findButton("五笔86") != null }
+            chooseLanguage(InputLanguage.ENGLISH); await { findButton("␣ English") != null }
+            click("123"); click("返回"); await { findButton("␣ English") != null }
+            chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }
             runOnMainSync { editor.setText("") }
             passed += "number_panel_return_operator_column_underscore_alignment_both_modes"
             checkCandidateArea(false)
@@ -544,11 +697,11 @@ class SmokeInstrumentation : Instrumentation() {
             await { editor.text.toString() == "工" }
             passed += "candidate_arrow_expand_collapse_select_grid_ui"
             passed += "wubi_input_ui"
-            click("五笔86"); await { findButton("abc") != null }
+            chooseLanguage(InputLanguage.ENGLISH); await { findButton("␣ English") != null }
             click("a"); await { editor.text.toString() == "工a" }
             passed += "latin_input_ui"
             click("换行") // Finish the current English word to restore the toolbar.
-            click("abc"); await { findButton("简") != null }
+            chooseLanguage(InputLanguage.WUBI); await { findButton("简") != null }
             runOnMainSync { editor.setText("") }
             click("v"); await { findText("编码：v") != null }
             click("简"); await { findButton("繁") != null && findButton("發") != null }
@@ -572,7 +725,7 @@ class SmokeInstrumentation : Instrumentation() {
             passed += "traditional_ambiguous_four_code_no_auto_commit_and_simplified_restore_ui"
             runOnMainSync { editor.setText("前文 "); editor.setSelection(editor.length()) }
             await { findButton("简") != null }
-            click("五笔86"); await { findButton("自动拼写已开启") != null }
+            chooseLanguage(InputLanguage.ENGLISH); await { findButton("自动拼写已开启") != null }
             val spellingKey = findButton("自动拼写已开启")!!
             runOnMainSync {
                 check(spellingKey.text.isEmpty() && spellingKey.foreground != null && spellingKey.isSelected)
@@ -622,11 +775,11 @@ class SmokeInstrumentation : Instrumentation() {
             await { findText("英文：app") == null && findButton("展开候选") == null }
             click("b"); await { editor.text.toString().startsWith("b前文") }
             click("换行")
-            click("abc"); await { findButton("简") != null }
+            chooseLanguage(InputLanguage.WUBI); await { findButton("简") != null }
             passed += "english_toggle_commits_raw_and_cursor_move_ends_composition_ui"
             runOnMainSync { editor.setText("") }
             waitForIdleSync()
-            click("切换大小写"); await { findButton("ABC") != null }
+            click("切换大小写"); await { findButton("␣ English") != null }
             "app".forEach { click(it.toString()) }
             await { findText("英文：APP") != null }
             click("展开候选"); click("APPLE", last = true)
@@ -667,7 +820,9 @@ class SmokeInstrumentation : Instrumentation() {
             check(findButton("展开候选") == null && findText("英文：app") == null)
             passed += "english_password_disables_completion_ui"
             runOnMainSync { editor.inputType = originalInputType; editor.setText(""); manager.restartInput(editor) }
-            await { findButton("简") != null && findButton("五笔86") != null }
+            await { findButton("切换语言") != null }
+            chooseLanguage(InputLanguage.WUBI)
+            await { findButton("简") != null && findButton("␣ 五笔86") != null }
             runOnMainSync { editor.setText("工a"); editor.setSelection(editor.length()) }
             click("表情"); await { findButton("😀") != null && findButton("‹ 键盘") != null }
             checkCandidateArea(false)
@@ -884,14 +1039,15 @@ class SmokeInstrumentation : Instrumentation() {
                     it.isAttachedToWindow && it.windowVisibility == View.VISIBLE && (it.parent as View).isShown
                 }
                 if (row != null) {
-                    val parent = row.parent as ViewGroup
-                    val index = parent.indexOfChild(row)
-                    val tools = parent.getChildAt(index - 1)
-                    val activeHeader = if (shown) row else tools
+                    val header = row.parent as ViewGroup
+                    val parent = header.parent as ViewGroup
+                    val tools = header.getChildAt(1)
+                    val globe = header.getChildAt(0)
                     correct = row.visibility == (if (shown) View.VISIBLE else View.GONE) &&
-                        tools.visibility == (if (shown) View.GONE else View.VISIBLE) && parent.childCount == 3 &&
-                        !parent.isLayoutRequested && parent.getChildAt(index + 1).top == activeHeader.bottom &&
-                        activeHeader.height == targetContext.dp(44)
+                        tools.visibility == (if (shown) View.GONE else View.VISIBLE) && parent.childCount == 2 && header.childCount == 3 &&
+                        !parent.isLayoutRequested && parent.getChildAt(1).top == header.bottom &&
+                        header.height == targetContext.dp(44) && visible(globe) &&
+                        globe.contentDescription == "切换语言"
                 }
             }
             correct
@@ -929,7 +1085,7 @@ class SmokeInstrumentation : Instrumentation() {
     private fun findTextOnMain(label: String): TextView? = windows().filterIsInstance<TextView>().firstOrNull {
         visible(it) && it.text.toString() == label
     }
-    private fun findKeyboardButton(char: Char): Button = windows().filterIsInstance<Button>().first { visible(it) && it.contentDescription == char.toString() }
+    private fun findKeyboardButton(char: Char): Button = windows().filterIsInstance<Button>().first { visible(it) && (it.tag == char.toString() || it.contentDescription == char.toString()) }
     private fun awaitKeyCase(uppercase: Boolean) {
         await {
             var correct = false
@@ -949,6 +1105,16 @@ class SmokeInstrumentation : Instrumentation() {
             (if (last) buttons.last() else buttons.first()).performClick()
         }
         waitForIdleSync()
+    }
+    private fun chooseLanguage(language: InputLanguage) {
+        click("切换语言")
+        await {
+            var shown = false
+            runOnMainSync { shown = windows().any { visible(it) && it.contentDescription == "输入语言列表" } }
+            shown
+        }
+        click(language.label)
+        await { findButton("␣ ${language.label}") != null }
     }
     private fun await(condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 8000

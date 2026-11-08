@@ -67,10 +67,10 @@ class MainActivity : Activity() {
         toggle("四码唯一自动上屏", "auto_unique", true)
         toggle("第五码提交首选并开始新编码", "fifth_commit", true)
         val enterRow = ui.row()
-        enterRow.addView(ui.text("回车键功能"), LinearLayout.LayoutParams(0, dp(48), 1f))
+        enterRow.addView(ui.text("五笔回车键功能"), LinearLayout.LayoutParams(0, dp(48), 1f))
         val enterActions = WubiEnterAction.entries
         val enterSpinner = Spinner(this).apply {
-            contentDescription = "回车键功能"
+            contentDescription = "五笔回车键功能"
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, enterActions.map { it.label })
             setSelection(enterActions.indexOf(WubiEnterAction.fromPreference(store.get("wubi_enter_action", "commit_code"))))
             onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -81,7 +81,7 @@ class MainActivity : Activity() {
             }
         }
         enterRow.addView(enterSpinner); page.addView(enterRow)
-        page.addView(ui.text("有五笔编码时生效；无编码时仍按输入框要求换行或执行发送等操作。首个候选无匹配时保留编码。", 13f, ui.palette.muted))
+        page.addView(ui.text("仅五笔86输入编码时生效；无编码时仍按输入框要求换行或执行发送等操作。首个候选无匹配时保留编码。", 13f, ui.palette.muted))
         toggle("按键轻震动", "haptic", false)
         toggle("字母键显示字根提示", "roots", false)
         page.addView(ui.text("开启后，五笔字母键显示简要字根；长按可查看该键完整字根。", 13f, ui.palette.muted))
