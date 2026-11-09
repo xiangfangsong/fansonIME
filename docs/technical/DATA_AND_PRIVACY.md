@@ -91,6 +91,7 @@ PRAGMA user_version=1;
 | `haptic` | `false` | 震动开关 |
 | `roots` | `false` | 字根简要提示与长按卡片共用开关 |
 | `number_row` | `true` | 三种语言共用数字行 |
+| `symbol_auto_return` | `true` | “输入符号后返回键盘”；仅符号网格输入后的自动返回，关闭后连续输入并保留分类；不影响 emoji 或符号页辅助按键 |
 | `theme` | `system` | `system / light / dark`；创建 Palette；设置页更改后重建页面 |
 | `key_height` | `48` | 字符串整数，解析失败回退 48，限制 40～64 dp；横屏实际高度最多 40 dp |
 

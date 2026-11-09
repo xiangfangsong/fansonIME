@@ -48,6 +48,12 @@ class SmokeInstrumentation : Instrumentation() {
             store.put("wubi_enter_action", "commit_code")
             store.put("number_row", "true")
             store.put("roots", "false")
+            // Simulate an upgraded installation with no preference for this new setting.
+            android.database.sqlite.SQLiteDatabase.openDatabase(
+                File(targetContext.noBackupFilesDir, "personal.db").absolutePath,
+                null, android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
+            ).use { it.delete("preferences", "key=?", arrayOf("symbol_auto_return")) }
+            check(store.get("symbol_auto_return", "missing") == "missing")
             WubiRepository(targetContext, store).use { repository ->
                 check(repository.lookup("a").first().text == "工")
                 check(repository.lookup("r").first().text == "的")
@@ -238,8 +244,13 @@ class SmokeInstrumentation : Instrumentation() {
             }
             passed += "local_trial_multiline_top_start_alignment"
             val enterSpinner = allViews(activity.window.decorView).filterIsInstance<android.widget.Spinner>().first { it.contentDescription == "五笔回车键功能" }
+            runOnMainSync {
+                check(allViews(activity.window.decorView).filterIsInstance<android.widget.Switch>().first { it.text.toString() == "输入符号后返回键盘" }.isChecked)
+            }
+            passed += "symbol_auto_return_setting_initially_enabled"
             runOnMainSync { check((0 until enterSpinner.count).map { enterSpinner.getItemAtPosition(it).toString() } == listOf("上屏五笔编码", "清除五笔编码", "上屏首个候选")) }
             screenshot("18-local-trial-settings")
+            screenshot("41-symbol-auto-return-setting-0.3.3")
             screenshot("39-default-language-0.3.2")
             runOnMainSync { editor.requestFocus() }
             await {
@@ -429,7 +440,7 @@ class SmokeInstrumentation : Instrumentation() {
             click("粘贴到输入框"); await { editor.text.toString() == "한붙여넣기" }
             click("‹ 返回键盘"); await { findButton("␣ 한국어") != null }
             click("符号"); await { findButton("返回键盘") != null }
-            click("+"); click("返回键盘")
+            click("+")
             await { findButton("␣ 한국어") != null && editor.text.toString() == "한붙여넣기+" }
             passed += "korean_popup_back_cancel_selection_replace_clipboard_paste_and_symbol_return"
             for (mode in listOf(InputLanguage.KOREAN, InputLanguage.ENGLISH)) {
@@ -1088,6 +1099,59 @@ class SmokeInstrumentation : Instrumentation() {
             runOnMainSync { editor.append("🇨🇳") }
             click("⌫"); await { editor.text.toString() == "工a" }
             passed += "complex_emoji_delete_ui"
+            InputLanguage.entries.forEach { language ->
+                chooseLanguage(language)
+                runOnMainSync { editor.setText("") }; refreshKeyboard()
+                click("符号"); await { findButton("返回键盘") != null }
+                reveal("……"); tap("……")
+                await { editor.text.toString() == "……" && findButton("␣ ${language.label}") != null }
+                check(findButton("返回键盘") == null)
+                checkCandidateArea(false)
+            }
+            chooseLanguage(InputLanguage.WUBI)
+            screenshot("42-symbol-auto-return-keyboard-0.3.3")
+            passed += "symbols_auto_return_all_languages_whole_multicharacter_symbol_and_original_language"
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            click("符号"); await { findButton("返回键盘") != null }
+            reveal("数学"); click("数学")
+            check(findButton("返回键盘") != null)
+            click("空格"); await { editor.text.toString() == " " }
+            check(findButton("返回键盘") != null)
+            click("退格"); await { editor.text.isEmpty() }
+            check(findButton("返回键盘") != null)
+            click("换行"); await { editor.text.toString() == "\n" }
+            check(findButton("返回键盘") != null)
+            click("返回键盘"); await { findButton("␣ 五笔86") != null }
+            passed += "symbol_category_space_delete_and_enter_do_not_auto_return"
+            setToggle("输入符号后返回键盘", false)
+            LocalStore(targetContext).use { check(it.get("symbol_auto_return", "true") == "false") }
+            InputLanguage.entries.forEach { language ->
+                chooseLanguage(language)
+                runOnMainSync { editor.setText("") }; refreshKeyboard()
+                click("符号"); await { findButton("返回键盘") != null }
+                reveal("英文"); click("英文")
+                reveal("\$"); click("\$"); reveal("^"); click("^")
+                await { editor.text.toString() == "\$^" }
+                runOnMainSync { check(windows().filterIsInstance<SymbolPanel>().single { visible(it) }.selectedCategory == "英文") }
+                click("返回键盘"); await { findButton("␣ ${language.label}") != null }
+            }
+            passed += "symbol_auto_return_disabled_persists_and_all_languages_keep_category_for_continuous_input"
+            for (enabled in listOf(false, true)) {
+                setToggle("输入符号后返回键盘", enabled)
+                chooseLanguage(InputLanguage.WUBI)
+                runOnMainSync { editor.setText("") }; refreshKeyboard()
+                click("表情"); await { findButton("😀") != null }
+                click("😀"); click("😀"); await { editor.text.toString() == "😀😀" }
+                check(findButton("‹ 键盘") != null && findButton("😀") != null)
+                click("‹ 键盘"); await { findButton("␣ 五笔86") != null }
+                click("符号"); await { findButton("返回键盘") != null }
+                reveal("→"); click("→"); await { editor.text.toString() == "😀😀→" }
+                if (enabled) await { findButton("␣ 五笔86") != null }
+                else { check(findButton("返回键盘") != null); click("返回键盘"); await { findButton("␣ 五笔86") != null } }
+            }
+            passed += "emoji_continuous_input_unchanged_in_both_symbol_return_settings_and_reenable_applies"
+            setToggle("输入符号后返回键盘", false)
+            runOnMainSync { editor.setText("工a"); editor.setSelection(editor.length()) }
             val beforeSymbols = LocalStore(targetContext).use { it.emojiUsage() }
             click("符号")
             checkCandidateArea(false)
@@ -1127,6 +1191,7 @@ class SmokeInstrumentation : Instrumentation() {
             reveal("数学"); click("数学"); screenshot("13-symbols-math")
             click("返回键盘")
             await { findButton("简") != null }
+            setToggle("输入符号后返回键盘", true)
             runOnMainSync { editor.setText("工a"); editor.setSelection(editor.length()) }
             // Known synthetic data only, on a disposable emulator.
             runOnMainSync { targetContext.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("test", "离线剪贴板测试")) }

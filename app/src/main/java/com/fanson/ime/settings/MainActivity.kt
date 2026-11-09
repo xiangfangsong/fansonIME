@@ -82,6 +82,8 @@ class MainActivity : Activity() {
         }
         defaultLanguageRow.addView(defaultLanguageSpinner); page.addView(defaultLanguageRow)
         page.addView(ui.text("初始为五笔86；修改后从所选语言开始，日常记住当前语言。地球短按往返英语与当前语言，长按选择其他语言。", 13f, ui.palette.muted))
+        toggle("输入符号后返回键盘", "symbol_auto_return", true)
+        page.addView(ui.text("在符号页输入一个符号后返回主键盘；关闭后可连续输入符号。表情输入不受影响。", 13f, ui.palette.muted))
         toggle("四码唯一自动上屏", "auto_unique", true)
         toggle("第五码提交首选并开始新编码", "fifth_commit", true)
         val enterRow = ui.row()

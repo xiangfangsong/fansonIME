@@ -86,6 +86,7 @@ class FansonInputMethodService : InputMethodService() {
     private var haptics = false
     private var showRootHints = false
     private var showNumberRow = true
+    private var symbolAutoReturn = true
     private var rootCard: WubiRootCard? = null
     private var wubiEnterAction = WubiEnterAction.COMMIT_CODE
     private var panel = "keyboard"
@@ -164,6 +165,7 @@ class FansonInputMethodService : InputMethodService() {
         haptics = store.get("haptic", "false").toBoolean()
         showRootHints = store.get("roots", "false").toBoolean()
         showNumberRow = store.get("number_row", "true").toBoolean()
+        symbolAutoReturn = store.get("symbol_auto_return", "true").toBoolean()
         rootCard?.dismiss(); rootCard = null
         languagePopup?.dismiss(); languagePopup = null
         if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) keyHeight = minOf(keyHeight, 40)
@@ -221,7 +223,7 @@ class FansonInputMethodService : InputMethodService() {
         if (mode == InputLanguage.WUBI) main.post(task) else task.run()
     }
 
-    private fun enqueue(operation: (InputEngine) -> EngineResult, after: (() -> Unit)? = null) {
+    private fun enqueue(operation: (InputEngine) -> EngineResult, after: (() -> Unit)? = null, onCommitted: (() -> Unit)? = null) {
         if (destroyed) return
         if (!ready) { hint(if (loadFailed) "离线数据加载失败，请重新打开输入法" else "正在准备离线码表"); return }
         val token = session.get()
@@ -237,10 +239,17 @@ class FansonInputMethodService : InputMethodService() {
             val candidates = e.candidates.toList()
             val readings = (e as? WubiEngine)?.showingReadings == true
             publishInput(mode, token) {
+                var committed = result.commits.isNotEmpty() && !search
                 // A syllable boundary commits its prefix and composes the next
                 // syllable together. Intermediate cursor callbacks must not reset it.
                 editorBatch {
-                    result.commits.forEach { if (search) emojiQuery += it else commitText(it) }
+                    result.commits.forEach {
+                        if (search) emojiQuery += it
+                        else {
+                            val accepted = commitText(it)
+                            committed = accepted && committed
+                        }
+                    }
                     result.composing?.let { currentInputConnection?.setComposingText(it, 1) }
                     currentCode = code; candidateSnapshot = candidates; expanded = false
                     showingReadings = readings
@@ -249,6 +258,7 @@ class FansonInputMethodService : InputMethodService() {
                 result.hint?.let { hint(it) }
                 if (search && result.commits.isNotEmpty()) { emojiPage = 0; renderBody() }
                 if (code.isEmpty()) after?.invoke()
+                if (code.isEmpty() && committed) onCommitted?.invoke()
             }
         }
     }
@@ -273,7 +283,19 @@ class FansonInputMethodService : InputMethodService() {
         enqueue({ it.letter(typed) })
         if (resetShift) { koreanShift = false; renderBody() }
     }
-    private fun punct(text: String) { rootCard?.dismiss(); languagePopup?.dismiss(); vibrate(); enqueue({ it.punctuation(text) }) }
+    private fun punct(text: String) { punct(text, null) }
+    private fun punct(text: String, onCommitted: (() -> Unit)?) {
+        rootCard?.dismiss(); languagePopup?.dismiss(); vibrate()
+        enqueue({ it.punctuation(text) }, onCommitted = onCommitted)
+    }
+    private fun insertSymbol(text: String) {
+        punct(text) {
+            if (symbolAutoReturn && panel == "symbols") {
+                panel = "keyboard"
+                renderCandidates(); renderBody()
+            }
+        }
+    }
     private fun space() { rootCard?.dismiss(); languagePopup?.dismiss(); vibrate(); enqueue({ it.space() }) }
     private fun deleteKey() {
         rootCard?.dismiss()
@@ -647,7 +669,7 @@ class FansonInputMethodService : InputMethodService() {
         container.addView(row)
     }
     private fun renderSymbols(container: LinearLayout) {
-        container.addView(SymbolPanel(ui, keyHeight, ::punct), LinearLayout.LayoutParams(-1, dp((keyHeight + 4) * 4)))
+        container.addView(SymbolPanel(ui, keyHeight, ::insertSymbol), LinearLayout.LayoutParams(-1, dp((keyHeight + 4) * 4)))
         val row = ui.row()
         ui.addWeighted(row, ui.button("返回键盘") { switchPanel("symbols") }, height = 44)
         ui.addWeighted(row, deleteButton(), height = 44)

@@ -41,6 +41,8 @@ sequenceDiagram
 
 `resolveThen(action)` 等价于 `enqueue({ it.resolve() }, action)`。服务用“操作后的 `code` 是否为空”判断是否继续打开面板、切语言、打开设置或光标控制；不是只看是否产生提交结果。
 
+0.3.3 另为 `enqueue()` 增加可选 `onCommitted` 通知：非搜索、存在 commits、全部 `commitText()` 返回 true 且 code 为空时调用。目前仅符号网格选择使用，控制设置允许的自动返回键盘。原 after 的条件保持；提交循环仍逐项执行，不使用会短路后续提交的 `all()`。这只增加完成通知，不补足提交失败后的引擎回滚/重放。
+
 0.3.2 的地球短按和长按菜单选择其他语言均复用 `chooseLanguage()`，只在 resolve 成功后的回调中保存当前语言和非英语回切目标；无匹配五笔不会更改这些偏好。`LanguagePreferences` 只计算目标及管理设置，不处理引擎或宿主编辑。五笔 Shift 保留原“提交编码再进入英文大写”的行为，同时记录五笔回切目标。
 
 ## 会话、顺序和过期结果
