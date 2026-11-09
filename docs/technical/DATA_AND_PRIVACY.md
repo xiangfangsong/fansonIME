@@ -78,11 +78,13 @@ PRAGMA user_version=1;
 
 ### 设置键契约
 
-来源为 `MainActivity`、`readSettings()` 和 `onStartInput()`，新增或改名要同步两端。
+来源为 `LanguagePreferences`、`MainActivity`、`readSettings()` 和 `onStartInput()`，新增或改名要同步写入与读取方。语言关联键通过 `LocalStore.putAll()` 在同一 SQLite 事务保存，不更改数据库版本或现有表。
 
 | key | 默认值 | 取值与应用时机 |
 | --- | --- | --- |
-| `input_language` | `wubi86` | `english / wubi86 / korean`；新输入框读取；主动换语言或五笔 Shift 进入英文时保存；未知值回退五笔 |
+| `default_language` | `wubi86` | `english / wubi86 / korean`；设置中的默认语言；修改时与当前首选、回切目标在同一事务内保存；未知值回退五笔 |
+| `input_language` | `default_language` | 新输入框读取；主动切换成功或五笔 Shift 进入英文时保存；旧安装保留原值，未知值回退五笔；字段自动覆盖不保存 |
+| `last_non_english_language` | 无记录 | 最近成功主动选择或离开的非英语语言；英语短按优先返回它，缺失/未知/误存英语时用非英语默认语言，默认也是英语则回退五笔；修改默认语言时重设 |
 | `wubi_enter_action` | `commit_code` | `commit_code / clear_code / first_candidate`；读取设置后在 worker 更新；未知值回退默认 |
 | `auto_unique` | `true` | 四码唯一提交，读取后在 worker 更新 |
 | `fifth_commit` | `true` | 第五码提交，读取后在 worker 更新 |

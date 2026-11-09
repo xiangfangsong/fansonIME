@@ -38,7 +38,7 @@
 
 ## 安装包
 
-界面截图：[繁体歧义候选](screenshots/17-traditional-variants-0.1.6.png)、[英文补全展开](screenshots/18-english-completion-0.1.6.png)、[Aa 自动拼写按钮](screenshots/19-english-spelling-key-0.1.6.png)。本轮直接选择行为由实际候选控件和输入法键盘回归验证；模拟器测试结束后连接中断，未新增本轮截图。
+界面截图：[繁体歧义候选](../screenshots/17-traditional-variants-0.1.6.png)、[英文补全展开](../screenshots/18-english-completion-0.1.6.png)、[Aa 自动拼写按钮](../screenshots/19-english-spelling-key-0.1.6.png)。本轮直接选择行为由实际候选控件和输入法键盘回归验证；模拟器测试结束后连接中断，未新增本轮截图。
 
 - 文件：`dist/fansonIME-0.1.6-debug.apk`
 - 大小：8,557,140 字节。

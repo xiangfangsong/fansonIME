@@ -45,8 +45,8 @@
 - 新增顶部检查：五笔输入、退格清空、选词后的按钮/候选互斥及固定高度；无匹配保留编码；英文补全、确认、关闭补全直接输入和退格清空；密码框及辅助页面均不显示空候选栏。
 - 编码前缀控件在 0、20、120、320、2000dp 宽度下不与候选按钮重叠、不越界；修正提示不替换原始编码。适配旧测试对常驻功能栏的假设，符号页改为等待实际面板出现后检查。
 - 原有数字行、字根卡片、回车设置、Shift、候选、简繁、英文补全、emoji、符号、剪贴板和生命周期回归通过。
-- 已人工查看[数字页截图](screenshots/23-number-panel-0.1.9.png)，布局与预期一致。
-- 已人工查看顶部优化截图：[空闲](screenshots/24-idle-toolbar-0.1.9.png)、[五笔](screenshots/25-wubi-candidates-0.1.9.png)、[英文补全](screenshots/26-english-candidates-0.1.9.png)、[英文直接输入](screenshots/27-english-direct-0.1.9.png)。
+- 已人工查看[数字页截图](../screenshots/23-number-panel-0.1.9.png)，布局与预期一致。
+- 已人工查看顶部优化截图：[空闲](../screenshots/24-idle-toolbar-0.1.9.png)、[五笔](../screenshots/25-wubi-candidates-0.1.9.png)、[英文补全](../screenshots/26-english-candidates-0.1.9.png)、[英文直接输入](../screenshots/27-english-direct-0.1.9.png)。
 
 ## 安装包与真机
 

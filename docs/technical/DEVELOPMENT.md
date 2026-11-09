@@ -1,6 +1,6 @@
 # 开发与验证
 
-基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前版本结果见 [0.3.1 验证记录](../VALIDATION-0.3.1.md)，历史结果见 [0.3.0 验证记录](../VALIDATION-0.3.0.md)，不能据此声称某次新改动也已通过。
+基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)，已验收与历史结果见 [0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)、[0.3.0 验证记录](../validation/VALIDATION-0.3.0.md)，不能据此声称某次新改动也已通过。
 
 ## 构建环境与命令
 
@@ -38,6 +38,22 @@ python tools\verify_assets.py
 | JVM 测试 XML | `app/build/test-results/testDebugUnitTest/` |
 | Lint HTML | `app/build/reports/lint-results-debug.html` |
 
+## Android Studio 导入与改名后的本地配置
+
+从仓库根目录打开工程，执行 Gradle Sync。IDE 的 Gradle JDK 与命令行 `JAVA_HOME` 是两处配置；构建脚本通过不代表 IDE 已使用正确 JDK。在 `Settings > Build, Execution, Deployment > Build Tools > Gradle` 为本项目选择 JDK 17 或 21。当前 Gradle 8.9 不使用 Studio 自带的 JBR 25；也不能沿用旧的 Java 13。配置机制见 [Android 官方 JDK 说明](https://developer.android.com/build/jdks)。
+
+改 `rootProject.name` 后，已有 IDE 模块模型与运行配置可能仍保留旧前缀。2026-11-09 本机日志在导入阶段报 `Can't find module entity for fansonIME.app`，外部模块缓存仍含 `fansonIME.app`，运行配置还指向 `fansonIME.app.unitTest`；这发生在 IDE 项目结构导入阶段。
+
+排查和恢复步骤：
+
+1. 先执行 `gradlew.bat projects :app:assembleDebug --offline --console=plain`（使用 JDK 17/21），确认根工程为 `FansonIME`、包含 `:app`，区分 Gradle 构建错误与 IDE 导入错误。
+2. 优先执行 Gradle Sync；若模块实体错误持续，保存文件并退出 Android Studio，避免它把内存中的旧配置写回。
+3. 备份 `.idea/`、`.gradle/config.properties` 及本项目的 IDE 缓存，再重建导入配置。Studio 2026.2.2 在本机将模块保存于 `%LOCALAPPDATA%/Google/AndroidStudio2026.2.2/projects/<项目名与位置哈希>/external_build_system/`，项目模型保存于同目录 `project-model-cache/`。先核对缓存归属，再将这个项目专用缓存目录整体移到备份位置，让 IDE 重新生成；路径随 IDE 版本和项目位置变化，不得照抄项目哈希、清空所有项目缓存或改 SDK 全局配置。
+4. 本地 `.idea/gradle.xml` 的 `gradleJvm` 应指向实际 JDK 17/21；使用 `#GRADLE_LOCAL_JAVA_HOME` 时，同时核对被 Git 忽略的 `.gradle/config.properties` 中 `java.home`。项目 SDK/语言级别也不应残留 Java 13。保留应用 ID、源码、个人数据、签名和测试 AVD。
+5. 重新打开根目录并完成 Gradle Sync，以实际导入的应用模块重建 `Android App` 运行配置（本项目为 `FansonIME.app`），不要选择 `.unitTest` 或 `.androidTest` 源集。检查 Sync 成功以及运行配置无模块错误；仅命令行构建成功不能作为 IDE 修复成功的证据。
+
+本地 `.idea/`、`.gradle/config.properties` 和 IDE 缓存均不提交。工程改名的验收应同时包含命令行与 IDE 导入、运行配置核对，不能仅搜索源码中的品牌大小写。
+
 ## 测试分层与源码入口
 
 当前有 8 个 JVM 测试文件、103 个 `@Test`；这是源码清点，执行状态以实际报告为准。
@@ -62,6 +78,10 @@ python tools\verify_assets.py
 0.3.1 增加六组仪器检查：三种语言主键盘/符号页的空格标签和输入；三种语言上行长按提示、短按及真实按下/保持/松手；英文与韩语先确认预编辑再输入半角标点；有候选确认/无匹配保护；emoji 搜索目标隔离；关于页版本与实际安装包一致。长按验证使用系统长按阈值并实际发 DOWN/UP，不能只用 `performLongClick()` 证明松手不会额外输入原标点。
 
 面板切换测试先等待目标面板的特有控件出现，再核对候选区、空格与布局。`checkCandidateArea(false)` 同时适用于空闲主键盘和辅助面板，不能单独证明异步切换已经完成；布局相关检查等待实际测量结果，不把创建 View 等同于已完成布局。
+
+真实触摸还要等待按键完成布局且屏幕坐标/尺寸稳定；从不同高度面板返回时，View 已完成布局也可能仍处于 IME 窗口位置变化中。一般菜单逻辑用 `performLongClick()` 触发监听器，另以专用真实 DOWN/UP 用例验证短按、长按阈值及松手抑制，避免把坐标时序失败误判成语言逻辑失败。
+
+0.3.2 在上述检查基础上增加默认语言/旧设置兼容与回切目标持久化、英语起始回退、三语短按往返、无匹配五笔不更新偏好、长按地球真实触摸抑制短按、设置三项保存与生效、Shift 回切。菜单测试统一用地球长按打开，短按用例独立验证不会弹出菜单；执行结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)。
 
 ## 模拟器回归
 
@@ -100,6 +120,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_emulator.ps1 -Ser
 | 现象 | 先核对 |
 | --- | --- |
 | 无法构建 | JDK 是否 17/21、SDK 35、wrapper、离线依赖是否已缓存；先看首个资源/编译错误 |
+| Studio 报 `Can't find module entity for fansonIME.app` | 按上文导入恢复步骤检查本项目旧模块缓存、运行配置和 Gradle JDK；不要为消除 IDE 错误改应用 ID 或源码包名 |
 | 一直提示加载或加载失败 | `onCreate()` 的资源链、元数据哈希、字典私有副本；当前统一错误提示不区分资源，勿通过记录用户输入定位 |
 | 五笔候选/选词不符合预期 | 输入编码与 `exact`、手动短语优先级、SQL 权重、简繁及读音开关；区分数据库结果与 UI 只显示一部分 |
 | 英文/韩语重复、缺字或覆盖旧位置 | 引擎 `commits/composing`、同批编辑、真实/过期光标回调、session 与线程归属 |
@@ -112,4 +133,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_emulator.ps1 -Ser
 
 ## 交付前记录
 
-功能版本更新 `app/build.gradle.kts` 与产品/版本文档；技术行为同步相应章节。验证记录写清日期、版本、实际命令、结果、测试环境、未验证项及最终 APK 路径/哈希。权限和签名检查针对最终 APK；历史记录不能替代本次产物检查。Git 提交、推送和真机操作按当前用户指示执行，文档整理本身不隐含这些外部动作。
+功能版本更新 `app/build.gradle.kts` 与产品/版本文档；技术行为同步相应章节。验证记录统一放在 `docs/validation/` 并维护目录索引，写清日期、版本、实际命令、结果、测试环境、未验证项及最终 APK 路径/哈希。权限和签名检查针对最终 APK；历史记录不能替代本次产物检查。Git 提交、推送和真机操作按当前用户指示执行，文档整理本身不隐含这些外部动作。

@@ -31,7 +31,7 @@
 
 开发阶段修正了弹层在输入法窗口内按父窗口坐标摆放而覆盖按键的问题，改用屏幕坐标及屏幕边界裁剪。真实长按测试使用屏幕坐标，避免误点宿主编辑框。最终截图已人工查看，字根和卡片边界清晰。
 
-截图：[Q 键字根](screenshots/20-wubi-root-card-q-0.1.8.png)、[N 键字根](screenshots/21-wubi-root-card-n-0.1.8.png)、[数字行和反查图标](screenshots/22-number-row-0.1.8.png)。
+截图：[Q 键字根](../screenshots/20-wubi-root-card-q-0.1.8.png)、[N 键字根](../screenshots/21-wubi-root-card-n-0.1.8.png)、[数字行和反查图标](../screenshots/22-number-row-0.1.8.png)。
 
 ## 安装包与真机
 

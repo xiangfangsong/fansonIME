@@ -32,6 +32,7 @@ import com.fanson.ime.keyboard.SymbolCatalog
 import com.fanson.ime.keyboard.SymbolPanel
 import com.fanson.ime.keyboard.dp
 import com.fanson.ime.settings.MainActivity
+import com.fanson.ime.settings.LanguagePreferences
 import java.io.File
 
 /** Run only on a disposable emulator. No existing user clip is read or retained. */
@@ -42,6 +43,8 @@ class SmokeInstrumentation : Instrumentation() {
         try {
             val store = LocalStore(targetContext)
             store.put("input_language", "wubi86")
+            store.put("default_language", "wubi86")
+            store.put("last_non_english_language", "")
             store.put("wubi_enter_action", "commit_code")
             store.put("number_row", "true")
             store.put("roots", "false")
@@ -110,6 +113,29 @@ class SmokeInstrumentation : Instrumentation() {
             LocalStore(targetContext).use { reopened -> check(reopened.clipboardHistory().size == 9) }
             passed += "clipboard_history_delete_persist"
             store.clearClipboardHistory()
+            val languagePreferences = LanguagePreferences(store)
+            store.put("default_language", "unknown")
+            store.put("last_non_english_language", "english")
+            check(languagePreferences.defaultLanguage == InputLanguage.WUBI)
+            check(languagePreferences.quickSwitchTarget(InputLanguage.ENGLISH) == InputLanguage.WUBI)
+            store.put("default_language", "korean")
+            store.put("input_language", "english")
+            store.put("last_non_english_language", "")
+            check(languagePreferences.preferredLanguage == InputLanguage.ENGLISH)
+            check(languagePreferences.quickSwitchTarget(InputLanguage.ENGLISH) == InputLanguage.KOREAN)
+            store.put("last_non_english_language", "unknown")
+            check(languagePreferences.quickSwitchTarget(InputLanguage.ENGLISH) == InputLanguage.KOREAN)
+            languagePreferences.recordSelection(InputLanguage.KOREAN, InputLanguage.ENGLISH)
+            LocalStore(targetContext).use { reopened ->
+                val restored = LanguagePreferences(reopened)
+                check(restored.preferredLanguage == InputLanguage.ENGLISH)
+                check(restored.quickSwitchTarget(InputLanguage.ENGLISH) == InputLanguage.KOREAN)
+            }
+            languagePreferences.setDefaultLanguage(InputLanguage.ENGLISH)
+            check(languagePreferences.quickSwitchTarget(InputLanguage.ENGLISH) == InputLanguage.WUBI)
+            languagePreferences.setDefaultLanguage(InputLanguage.WUBI)
+            store.put("last_non_english_language", "")
+            passed += "language_preferences_legacy_english_default_fallback_invalid_values_and_persistence"
             store.close()
             val activity = startActivitySync(Intent(targetContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             waitForIdleSync()
@@ -214,6 +240,7 @@ class SmokeInstrumentation : Instrumentation() {
             val enterSpinner = allViews(activity.window.decorView).filterIsInstance<android.widget.Spinner>().first { it.contentDescription == "五笔回车键功能" }
             runOnMainSync { check((0 until enterSpinner.count).map { enterSpinner.getItemAtPosition(it).toString() } == listOf("上屏五笔编码", "清除五笔编码", "上屏首个候选")) }
             screenshot("18-local-trial-settings")
+            screenshot("39-default-language-0.3.2")
             runOnMainSync { editor.requestFocus() }
             await {
                 var focused = false
@@ -273,7 +300,7 @@ class SmokeInstrumentation : Instrumentation() {
                     if (shown) check((0 until rows.single().childCount).map { (rows.single().getChildAt(it) as Button).text.toString() } == "1234567890".map { it.toString() })
                 }
             }
-            click("切换语言")
+            longPress("切换语言")
             runOnMainSync {
                 val menu = windows().filterIsInstance<android.widget.LinearLayout>().first { visible(it) && it.contentDescription == "输入语言列表" }
                 val items = (0 until menu.childCount).map { menu.getChildAt(it) as Button }
@@ -281,6 +308,7 @@ class SmokeInstrumentation : Instrumentation() {
                 check(items.map { it.isSelected } == listOf(false, true, false))
             }
             screenshot("31-language-selector")
+            screenshot("40-language-menu-0.3.2")
             click("五笔86")
             chooseLanguage(InputLanguage.KOREAN)
             checkCandidateArea(false); checkNumberRow(true)
@@ -365,13 +393,13 @@ class SmokeInstrumentation : Instrumentation() {
             passed += "same_language_menu_keeps_composition_and_cross_language_switch_confirms_once"
             runOnMainSync { editor.setText("") }
             click("a"); await { findText("编码：a") != null }
-            click("切换语言"); runOnMainSync { check(editor.text.isEmpty()) }
+            longPress("切换语言"); runOnMainSync { check(editor.text.isEmpty()) }
             screenshot("34-selector-during-wubi-composition")
             click("English"); await { findButton("␣ English") != null && editor.text.toString() == "工" }
             chooseLanguage(InputLanguage.WUBI)
             val switchingNoMatch = LocalStore(targetContext).use { personal -> WubiRepository(targetContext, personal).use { repo -> listOf("yyyy", "abcd", "qwer", "yxyx", "xxyy").first { repo.lookup(it).isEmpty() } } }
             switchingNoMatch.forEach { click(it.toString()) }
-            click("切换语言"); click("한국어")
+            longPress("切换语言"); click("한국어")
             await { findText("编码：$switchingNoMatch") != null }
             check(findButton("␣ 五笔86") != null)
             repeat(switchingNoMatch.length) { click("退格") }
@@ -385,7 +413,7 @@ class SmokeInstrumentation : Instrumentation() {
             await { findButton("␣ 한국어") != null && editor.text.toString() == "ㄱ1한" }
             passed += "korean_cursor_move_ends_composition_and_numeric_panel_preserves_language"
             runOnMainSync { editor.setText("") }; refreshKeyboard()
-            koreanKeys("gks"); click("切换语言")
+            koreanKeys("gks"); longPress("切换语言")
             uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
             await {
                 var closed = false
@@ -421,6 +449,73 @@ class SmokeInstrumentation : Instrumentation() {
             runOnMainSync { editor.inputType = koreanInputType; manager.restartInput(editor) }
             await { findButton("␣ 한국어") != null }
             passed += "remembered_language_survives_reopen_and_temporary_password_english_override"
+            chooseLanguage(InputLanguage.WUBI)
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            chooseLanguage(InputLanguage.ENGLISH)
+            LocalStore(targetContext).use { it.put("last_non_english_language", "") }
+            refreshKeyboard(); await { findButton("␣ English") != null }
+            click("切换语言"); await { findButton("␣ 五笔86") != null }
+            passed += "english_start_without_return_history_uses_initial_wubi_default"
+            click("a"); await { findText("编码：a") != null }
+            tap("切换语言")
+            await { findButton("␣ English") != null && editor.text.toString() == "工" }
+            runOnMainSync { check(windows().none { visible(it) && it.contentDescription == "输入语言列表" }) }
+            tap("切换语言"); await { findButton("␣ 五笔86") != null }
+            check(editor.text.toString() == "工")
+            passed += "globe_short_tap_wubi_english_round_trip_confirms_candidate_without_menu"
+            switchingNoMatch.forEach { click(it.toString()) }
+            click("切换语言")
+            await { findText("编码：$switchingNoMatch") != null }
+            LocalStore(targetContext).use {
+                check(it.get("input_language", "") == "wubi86")
+                check(it.get("last_non_english_language", "") == "wubi86")
+            }
+            check(findButton("␣ 五笔86") != null && editor.text.toString() == "工")
+            repeat(switchingNoMatch.length) { click("退格") }
+            passed += "globe_short_tap_unmatched_wubi_preserves_code_language_and_return_target"
+            chooseLanguage(InputLanguage.KOREAN)
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            koreanKeys("gks"); tap("切换语言")
+            await { findButton("␣ English") != null && editor.text.toString() == "한" }
+            "app".forEach { click(it.toString()) }; tap("切换语言")
+            await { findButton("␣ 한국어") != null && editor.text.toString() == "한app" }
+            runOnMainSync { check(android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0) }
+            repeat(2) { click("切换语言"); await { findButton("␣ English") != null }; click("切换语言"); await { findButton("␣ 한국어") != null } }
+            check(editor.text.toString() == "한app")
+            koreanKeys("gks"); longPress("切换语言")
+            runOnMainSync {
+                check(findButtonOnMain("␣ 한국어").isShown)
+                check(windows().any { visible(it) && it.contentDescription == "输入语言列表" })
+                check(android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) >= 0)
+            }
+            click("한국어"); koreanKeys("k")
+            await { editor.text.toString() == "한app하나" }
+            passed += "globe_korean_english_round_trip_composing_and_real_long_press_suppresses_short_tap"
+            chooseLanguage(InputLanguage.WUBI)
+            runOnMainSync { editor.setText("") }; refreshKeyboard()
+            val defaultLanguageSpinner = allViews(activity.window.decorView).filterIsInstance<android.widget.Spinner>().first { it.contentDescription == "默认语言" }
+            runOnMainSync {
+                check((0 until defaultLanguageSpinner.count).map { defaultLanguageSpinner.getItemAtPosition(it).toString() } == listOf("English", "五笔86", "한국어"))
+                check(defaultLanguageSpinner.selectedItemPosition == InputLanguage.entries.indexOf(InputLanguage.WUBI))
+                defaultLanguageSpinner.setSelection(InputLanguage.entries.indexOf(InputLanguage.KOREAN))
+            }
+            await { LocalStore(targetContext).use { it.get("default_language", "") == "korean" && it.get("input_language", "") == "korean" } }
+            refreshKeyboard(); await { findButton("␣ 한국어") != null }
+            chooseLanguage(InputLanguage.ENGLISH)
+            LocalStore(targetContext).use { it.put("last_non_english_language", "") }
+            refreshKeyboard(); await { findButton("␣ English") != null }
+            click("切换语言"); await { findButton("␣ 한국어") != null }
+            runOnMainSync { defaultLanguageSpinner.setSelection(InputLanguage.entries.indexOf(InputLanguage.ENGLISH)) }
+            await { LocalStore(targetContext).use { it.get("default_language", "") == "english" && it.get("input_language", "") == "english" } }
+            refreshKeyboard(); await { findButton("␣ English") != null }
+            click("切换语言"); await { findButton("␣ 五笔86") != null }
+            runOnMainSync { defaultLanguageSpinner.setSelection(InputLanguage.entries.indexOf(InputLanguage.WUBI)) }
+            await { LocalStore(targetContext).use { it.get("default_language", "") == "wubi86" && it.get("input_language", "") == "wubi86" } }
+            refreshKeyboard(); await { findButton("␣ 五笔86") != null }
+            passed += "default_language_setting_all_options_persist_apply_and_english_start_fallback"
+            click("切换大小写"); await { findButton("␣ English") != null }
+            click("切换语言"); await { findButton("␣ 五笔86") != null }
+            passed += "wubi_shift_to_uppercase_english_retains_wubi_quick_return"
             chooseLanguage(InputLanguage.WUBI)
             LocalStore(targetContext).use { it.clearEmojiUsage() }
             runOnMainSync { editor.setText(""); enterSpinner.setSelection(0) }; refreshKeyboard()
@@ -1197,25 +1292,46 @@ class SmokeInstrumentation : Instrumentation() {
         waitForIdleSync()
     }
     private fun longPress(label: String) {
-        await { findButton(label) != null }
+        touchButton(label, android.view.ViewConfiguration.getLongPressTimeout() + 150L)
+    }
+    private fun tap(label: String) { touchButton(label, 50L) }
+    private fun touchButton(label: String, holdMillis: Long) {
+        var previousPosition: List<Int>? = null
+        var stableSince = 0L
+        await {
+            var laidOut = false
+            runOnMainSync {
+                val button = windows().filterIsInstance<Button>().firstOrNull {
+                    visible(it) && (it.text.toString() == label || it.contentDescription?.toString() == label)
+                }
+                if (button != null && button.isLaidOut && button.width > 0 && button.height > 0) {
+                    val position = IntArray(2).also { button.getLocationOnScreen(it) }.toList() + listOf(button.width, button.height)
+                    if (position != previousPosition) { previousPosition = position; stableSince = SystemClock.uptimeMillis() }
+                    laidOut = SystemClock.uptimeMillis() - stableSince >= 150L
+                }
+            }
+            laidOut
+        }
         val location = IntArray(2)
         var x = 0f
         var y = 0f
         runOnMainSync {
             val button = findButtonOnMain(label)
-            check(button.isLongClickable)
+            if (holdMillis > android.view.ViewConfiguration.getLongPressTimeout()) check(button.isLongClickable)
             button.getLocationOnScreen(location)
             x = location[0] + button.width / 2f
             y = location[1] + button.height / 2f
         }
         val down = SystemClock.uptimeMillis()
         sendPointerSync(android.view.MotionEvent.obtain(down, down, android.view.MotionEvent.ACTION_DOWN, x, y, 0))
-        SystemClock.sleep(android.view.ViewConfiguration.getLongPressTimeout() + 150L)
+        SystemClock.sleep(holdMillis)
         sendPointerSync(android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_UP, x, y, 0))
         waitForIdleSync()
     }
     private fun chooseLanguage(language: InputLanguage) {
-        click("切换语言")
+        // Menu semantics are separate from the real DOWN/UP globe cases above.
+        await { findButton("切换语言") != null }
+        runOnMainSync { findButtonOnMain("切换语言").performLongClick() }
         await {
             var shown = false
             runOnMainSync { shown = windows().any { visible(it) && it.contentDescription == "输入语言列表" } }

@@ -68,17 +68,17 @@ flowchart TD
 
 | 回调或动作 | 当前处理 |
 | --- | --- |
-| `onStartInput()` | `invalidateSession()`；计算 `privateField/password`；读取常用语言并应用字段临时覆盖；数字类进入数字页；重置大小写并读取设置 |
+| `onStartInput()` | `invalidateSession()`；计算 `privateField/password`；通过 `LanguagePreferences` 读取上次主动语言（缺失用默认语言）并应用字段临时覆盖；数字类进入数字页；重置大小写并读取设置 |
 | `onStartInputView()` | 重新读取设置并重绘 |
 | `invalidateSession()` | 递增 `session`；关闭弹层；释放剪贴板预览；取消连删；清空候选、编码、读音及 emoji 搜索/分页状态；同步重置英文和韩语，排队重置五笔 |
 | `onFinishInputView()` | 结束宿主 composing；失效会话；恢复主键盘并重绘 |
 | `onFinishInput()` | 失效会话；清除隐私/密码标志 |
-| 选择其他语言 | 先 `resolveThen()`，成功清空引擎编码后失效会话，再更新语言与持久化偏好 |
+| 短按地球或菜单选择其他语言 | 先 `resolveThen()`，成功清码后失效会话，通过 `LanguagePreferences` 原子保存语言与非英语回切目标，再返回主键盘 |
 | `onDestroy()` | 先标记销毁并使会话失效、停监听；调用父类后再排队关闭仓库和 store、关闭 worker、移除主线程回调 |
 
 销毁顺序有实际约束：父类 `onDestroy()` 会触发结束输入回调，worker 要在这些回调之后关闭，不能提前 `shutdown()` 再让回调向其投递任务。服务的剪贴板监听持续到销毁，键盘或剪贴板面板隐藏本身不停止监听。
 
-`traditional` 与 `spelling` 默认分别为 `false/true`，在当前服务对象内保留，不落盘；会话失效不重置它们。常用语言落盘；大小写在新输入框重置，韩语一次 Shift 在当前字母输入后复原。
+`traditional` 与 `spelling` 默认分别为 `false/true`，在当前服务对象内保留，不落盘；会话失效不重置它们。默认语言、常用语言与非英语回切目标经 `LanguagePreferences` 落盘，相关键通过 `LocalStore.putAll()` 在同一 SQLite 事务保存，表结构与数据库版本不变；字段自动覆盖不写入。大小写在新输入框重置，韩语一次 Shift 在当前字母输入后复原。
 
 ## 当前实现决策记录
 

@@ -40,6 +40,7 @@ import com.fanson.ime.keyboard.LanguagePopup
 import com.fanson.ime.keyboard.Ui
 import com.fanson.ime.keyboard.dp
 import com.fanson.ime.settings.MainActivity
+import com.fanson.ime.settings.LanguagePreferences
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
@@ -58,6 +59,7 @@ class FansonInputMethodService : InputMethodService() {
     private var pronunciation: PronunciationRepository? = null
     private var emoji: EmojiRepository? = null
     private lateinit var store: LocalStore
+    private lateinit var languagePreferences: LanguagePreferences
     private lateinit var clipboard: ClipboardController
     private lateinit var ui: Ui
     private var root: LinearLayout? = null
@@ -105,6 +107,7 @@ class FansonInputMethodService : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         store = LocalStore(this)
+        languagePreferences = LanguagePreferences(store)
         clipboard = ClipboardController(this)
         // Stay attached for the lifetime of the default IME service so copies
         // made while the keyboard/panel is hidden can enter the requested history.
@@ -143,7 +146,7 @@ class FansonInputMethodService : InputMethodService() {
         invalidateSession()
         privateField = EditorPolicy.privateField(attribute)
         password = EditorPolicy.password(attribute.inputType)
-        val preferred = InputLanguage.fromPreference(store.get("input_language", "wubi86"))
+        val preferred = languagePreferences.preferredLanguage
         language = EditorPolicy.initialLanguage(attribute.inputType, preferred)
         panel = if (EditorPolicy.numeric(attribute.inputType)) "numbers" else "keyboard"
         uppercase = false; koreanShift = false
@@ -390,9 +393,14 @@ class FansonInputMethodService : InputMethodService() {
         container.removeAllViews(); container.setBackgroundColor(ui.palette.background)
         container.setPadding(dp(3), dp(4), dp(3), dp(4))
         val header = ui.row().apply { contentDescription = "键盘顶部" }
-        globe = ui.iconButton(R.drawable.ic_globe, "切换语言") { showLanguages() }.apply {
+        globe = ui.iconButton(R.drawable.ic_globe, "切换语言") {
+            chooseLanguage(languagePreferences.quickSwitchTarget(language))
+        }.apply {
             isEnabled = ready
-            stateDescription = language.label + if (privateField) "，隐私输入" else ""
+            stateDescription = "${language.label}，短按切换到${languagePreferences.quickSwitchTarget(language).label}，长按选择语言" +
+                if (privateField) "，隐私输入" else ""
+            tooltipText = "短按切换语言，长按选择语言"
+            setOnLongClickListener { showLanguages(); true }
         }.also { header.addView(it, LinearLayout.LayoutParams(dp(44), dp(40)).apply { setMargins(dp(2), dp(2), dp(2), dp(2)) }) }
         val tools = ui.row().apply { contentDescription = "功能按钮栏" }
         toolbar = tools
@@ -480,8 +488,8 @@ class FansonInputMethodService : InputMethodService() {
         if (next == language) return
         resolveThen {
             invalidateSession()
+            languagePreferences.recordSelection(language, next)
             language = next; uppercase = false
-            store.put("input_language", next.value)
             leaveClipboard(); panel = "keyboard"; render()
         }
     }
@@ -492,8 +500,9 @@ class FansonInputMethodService : InputMethodService() {
             koreanShift = !koreanShift; renderBody()
         } else if (chinese) {
             enqueue({ if (it is WubiEngine) it.enter(WubiEnterAction.COMMIT_CODE) else it.enter() }, after = {
+                languagePreferences.recordSelection(language, InputLanguage.ENGLISH)
                 language = InputLanguage.ENGLISH; uppercase = true
-                store.put("input_language", language.value); render()
+                render()
             })
         } else {
             uppercase = !uppercase

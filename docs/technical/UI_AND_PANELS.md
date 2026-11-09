@@ -30,6 +30,14 @@ val showCandidates = inputPanel && currentCode.isNotEmpty() && !password &&
 
 当前结构是根节点内 header＋body；header 内 globe＋toolbar＋candidateRow，二者通过 `GONE/VISIBLE` 互斥。`SmokeInstrumentation.checkCandidateArea()` 会验证结构、44dp 高度和相邻位置，结构重构需同步调整有意义的断言。
 
+## 地球键与默认语言（0.3.2）
+
+地球短按调用 `LanguagePreferences.quickSwitchTarget()` 后共用 `chooseLanguage()`：非英语进入英语，英语优先回到最近非英语语言；无记录使用默认语言，默认也是英语时回退五笔。五笔、韩语可分别与英语往返；长按才打开固定顺序菜单，监听器返回 true，松手不再短按。无障碍名称仍为“切换语言”，状态说明包含当前语言、短按目标及长按提示。
+
+`chooseLanguage()` 仍先 `resolveThen()`，成功清码后才通过 `LanguagePreferences` 保存当前语言和回切目标，失效会话并返回主键盘。无匹配五笔阻止切换和偏好更新；英文/韩语先确认 composing。内部搜索先 resolve 到 `emojiQuery`，不写宿主正文。五笔 Shift 进入英文大写时也记住五笔回切目标。
+
+设置“输入习惯”新增“默认语言”，可选 English、五笔86、한국어，初始五笔86。修改后下次进入输入会话从所选语言开始并重设回切目标；日常新输入框仍沿用上次主动语言，已有安装保留原 `input_language`。仅打开设置或重建页面不会覆盖当前语言。字段临时使用英语/数字页的规则保持，不写回语言偏好。
+
 ## 候选测量、选择与展开
 
 普通模式先测量每个候选按钮自然宽度；编码提示最多 120dp，且不超过当前候选条宽度的 30%。剩余区域交给 `CandidateRowLayout.plan()`：
@@ -82,7 +90,7 @@ val showCandidates = inputPanel && currentCode.isNotEmpty() && !password &&
 
 ## 弹层与界面约束
 
-语言顺序来自 `InputLanguage.entries`，固定 English、五笔86、한국어。打开、取消或选择当前项不确认原输入；选择其他项才 resolve。新输入、重绘和会话失效关闭列表，返回键优先关闭语言列表。
+长按地球打开语言列表，顺序来自 `InputLanguage.entries`，固定 English、五笔86、한국어。打开、取消或选择当前项不确认原输入；选择其他项才 resolve。新输入、重绘和会话失效关闭列表，返回键优先关闭语言列表。
 
 字根卡片仅在五笔、非密码且 `roots=true` 时响应 A～Y 长按。用专用字体显示字根 JSON 的全部形态，长按返回 `true`，不提交字母。两类 PopupWindow 都以可见屏幕范围限制位置，尽量显示在锚点上方，不抢占输入焦点；重构时要保留横竖屏及 RTL 边界处理。
 

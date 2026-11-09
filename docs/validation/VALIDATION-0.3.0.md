@@ -26,7 +26,7 @@
 - 新增 13 组交互检查：固定语言顺序、当前项勾选及布局；实时组字和逐键退格；词组与收音重新组合；Shift 一次上档和复合元音；快速连续输入；三种五笔回车设置下韩语一次换行；韩语一次发送；相同语言保持组合和跨语言确认；候选期间切换和无匹配保护；光标与数字页；返回键取消列表、选择替换、剪贴板粘贴和符号页；英文/韩语无 emoji 搜索；记住语言与密码字段临时覆盖。
 - 其余 74 项原有检查通过，覆盖五笔及 Z 查读音、简繁、英文补全、数字行、字根卡片、emoji、符号、剪贴板和生命周期。
 - 实际输入框验证 `한글`、`안녕하세요`、`가나`、`달가`、`갑사`、`까`、`과`。检查宿主 composing 区域，退格及语言切换不重复上屏、不覆盖旧光标位置；音节边界提交与下一音节组合在同一批编辑内完成。
-- 已人工检查并归档：[语言列表](screenshots/31-language-selector-0.3.0.png)、[实时韩语组字](screenshots/32-korean-composition-0.3.0.png)、[完整韩语输入](screenshots/33-korean-word-0.3.0.png)、[候选期间切换](screenshots/34-selector-during-composition-0.3.0.png)。
+- 已人工检查并归档：[语言列表](../screenshots/31-language-selector-0.3.0.png)、[实时韩语组字](../screenshots/32-korean-composition-0.3.0.png)、[完整韩语输入](../screenshots/33-korean-word-0.3.0.png)、[候选期间切换](../screenshots/34-selector-during-composition-0.3.0.png)。
 
 ## 安装包与真机
 
@@ -43,7 +43,7 @@
 
 ## 2026-11-09 文档与命名整理补记
 
-本节记录统一英文名为 **FansonIME** 和补齐技术文档后的检查，应用仍为 0.3.0 / versionCode 14。以上 2026-11-08 的 APK 路径、哈希、87 项模拟器及真机记录保留原意，不表示本次重新运行。更名范围与保留标识见 [命名约定](technical/NAMING.md)。
+本节记录统一英文名为 **FansonIME** 和补齐技术文档后的检查，应用仍为 0.3.0 / versionCode 14。以上 2026-11-08 的 APK 路径、哈希、87 项模拟器及真机记录保留原意，不表示本次重新运行。更名范围与保留标识见 [命名约定](../technical/NAMING.md)。
 
 本次已执行：
 

@@ -13,6 +13,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import com.fanson.ime.data.LocalStore
 import com.fanson.ime.engine.WubiEnterAction
+import com.fanson.ime.engine.InputLanguage
 import com.fanson.ime.R
 import com.fanson.ime.keyboard.Palette
 import com.fanson.ime.keyboard.Ui
@@ -64,6 +65,23 @@ class MainActivity : Activity() {
         page.addView(sample, LinearLayout.LayoutParams(-1, dp(120)))
         page.addView(ui.text("试打内容不保存。剪贴板查看和清空在键盘顶部的「剪贴板」面板中。", 13f, ui.palette.muted))
         section("输入习惯")
+        val languagePreferences = LanguagePreferences(store)
+        val defaultLanguageRow = ui.row()
+        defaultLanguageRow.addView(ui.text("默认语言"), LinearLayout.LayoutParams(0, dp(48), 1f))
+        val languages = InputLanguage.entries
+        val defaultLanguageSpinner = Spinner(this).apply {
+            contentDescription = "默认语言"
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, languages.map { it.label })
+            setSelection(languages.indexOf(languagePreferences.defaultLanguage))
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    if (languages[position] != languagePreferences.defaultLanguage) languagePreferences.setDefaultLanguage(languages[position])
+                }
+            }
+        }
+        defaultLanguageRow.addView(defaultLanguageSpinner); page.addView(defaultLanguageRow)
+        page.addView(ui.text("初始为五笔86；修改后从所选语言开始，日常记住当前语言。地球短按往返英语与当前语言，长按选择其他语言。", 13f, ui.palette.muted))
         toggle("四码唯一自动上屏", "auto_unique", true)
         toggle("第五码提交首选并开始新编码", "fifth_commit", true)
         val enterRow = ui.row()

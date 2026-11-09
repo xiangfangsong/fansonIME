@@ -19,9 +19,21 @@
 - 最终归档为 `dist/FansonIME-0.3.1-debug.apk`，10,153,591 字节，与实际测试及安装 APK 的哈希一致。SHA-256：`f90141ac802f3e127088fbf8651c9e3eacd754dfddfc72c2a113508e698e27bd`；v2 签名校验通过，证书与构建 15 一致。
 - 本轮首次回归在符号页空格断言处中断：原 `checkCandidateArea(false)` 在空闲主键盘和符号页都成立，无法证明异步面板切换已完成。测试已增加“返回键盘”入口出现的等待，并等待标点两行布局就绪后再核对上方提示，重新执行完整回归；应用 APK 未因此变动。
 - 修正等待条件后，执行 `tools\test_emulator.ps1 -Serial emulator-5580`，退出码 0，`count=93`、`INSTRUMENTATION_CODE: -1`，无 failure 字段。93 项完整检查通过，覆盖三种语言上方提示、真实长按松手不额外输入，以及英文/韩语预编辑确认后分别得到 `a!b?`、`가!나?`；原有功能回归通过。
-- 已人工检查本轮截图：[中文上方提示](screenshots/36-punctuation-long-press-0.3.1.png)、[英文上方提示](screenshots/37-english-punctuation-0.3.1.png)、[韩语上方提示](screenshots/38-korean-punctuation-0.3.1.png)。均为小字号长按符号在上、原标点在下，中文全角与英文/韩语半角输出正确。
+- 已人工检查本轮截图：[中文上方提示](../screenshots/36-punctuation-long-press-0.3.1.png)、[英文上方提示](../screenshots/37-english-punctuation-0.3.1.png)、[韩语上方提示](../screenshots/38-korean-punctuation-0.3.1.png)。均为小字号长按符号在上、原标点在下，中文全角与英文/韩语半角输出正确。
 - 提前告知后向 HUAWEI NOH-AN00 / API 31 执行 `install -r`，返回 `Success`；安装后核对版本 0.3.1 / 16，首次安装时间不变，已打开 `.settings.MainActivity`。未卸载、清库、通过 ADB 输入测试正文、读写剪贴板或改默认输入法；未读取个人数据做比对。
 - 2026-11-09 用户确认真机验证通过并授权提交，要求提交信息以 `feat:` 开头且使用中文，已写入根目录 `AGENTS.md`。未做本轮横屏、多宿主应用或 release 专项验证；本次只授权提交，不推送。
+
+## Android Studio 本地工程恢复
+
+2026-11-09，0.3.1 提交后用户反馈打开工程报 `Can't find module entity for fansonIME.app`。检查发现 Gradle 根工程名已为 `FansonIME`，但 Studio 2026.2.2 的本项目外部模块缓存仍含旧前缀，`app` 运行配置指向 `fansonIME.app.unitTest`；本地 Gradle JVM 和项目 SDK 还指向 Java 13。命令行构建成功未覆盖这项 IDE 导入问题。
+
+- 用户保存并关闭 Studio 后，备份 `.idea/`、`.gradle/config.properties` 和已核对归属的项目专用 IDE 缓存至 `.local/ide-backups/20261109-214516/`。缓存整体移入备份，没有清空其他项目缓存或修改全局 SDK 配置。
+- Gradle JVM 改用 `#GRADLE_LOCAL_JAVA_HOME`，本机 `java.home` 指向已安装的 JDK 17；项目 SDK/语言级别调整为对应的 JDK 17，应用运行配置改为 `FansonIME.app`。这些本地配置和备份均被 Git 忽略。
+- 重新打开根目录，日志确认 Gradle 使用 `C:/Program Files/Java/jdk17`；21:45:52 出现 `onImportFinished(E:/Android/project/fansonIME)` 与 `Gradle sync finished in 16 s 683 ms`，本轮同步日志没有 `Can't find module entity`。
+- 核对新生成的模块清单包含 `FansonIME`、`FansonIME.app` 及对应源集，`AndroidRunConfigurationType` 的 `app` 配置引用 `FansonIME.app`，与已导入的应用模块一致。
+- 使用 JDK 17 执行 `gradlew.bat projects :app:assembleDebug --offline --console=plain`，确认根工程 `FansonIME`、子工程 `:app`，`BUILD SUCCESSFUL`。源码、应用版本、签名及数据协议未改；本次未重新安装真机或执行输入交互回归。
+- 本轮通过 IDE 日志和落盘模块/运行配置核对，未通过 UI 自动化检查运行配置对话框或点击运行。Studio 日志仍有此前已有的全局旧 SDK 附加数据不一致记录，构建有 SDK XML 版本警告；均未阻止本轮导入或构建，未作为本次旧模块恢复的一部分修改。
+- 对应排查步骤写入 [开发与验证](../technical/DEVELOPMENT.md#android-studio-导入与改名后的本地配置)，命名说明和 `AGENTS.md` 补充 IDE 导入验收要求。用户后续确认问题已修复，相关记录随 0.3.2 维护；未推送。
 
 ## 首次构建 15 的验证（历史）
 
@@ -43,7 +55,7 @@
 
 - 新增 5 组检查：关于页版本一致性；三种语言空格显示和符号页空格实际输入；中文短按与真实长按松手不额外输入；有候选先确认和无匹配保留；emoji 五笔搜索目标隔离。
 - 原有五笔/读音、简繁、英文、韩语、数字页、字根、emoji、符号、剪贴板与生命周期回归通过。
-- 人工检查并归档当时截图：[符号页空格](screenshots/35-symbol-space-0.3.1.png)、[构建 15 主键盘长按标点](screenshots/36-punctuation-long-press-0.3.1-build15.png)。确认符号页无模式名称，主键盘保留模式，长按提示和实际“，。！？”输入均可见；长按提示在下方的布局已按反馈在构建 16 修订。
+- 人工检查并归档当时截图：[符号页空格](../screenshots/35-symbol-space-0.3.1.png)、[构建 15 主键盘长按标点](../screenshots/36-punctuation-long-press-0.3.1-build15.png)。确认符号页无模式名称，主键盘保留模式，长按提示和实际“，。！？”输入均可见；长按提示在下方的布局已按反馈在构建 16 修订。
 
 ### APK 与真机
 

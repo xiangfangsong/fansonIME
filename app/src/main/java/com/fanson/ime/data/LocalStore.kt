@@ -29,6 +29,13 @@ class LocalStore(context: Context) : AutoCloseable {
     @Synchronized fun put(key: String, value: String) {
         db.execSQL("INSERT OR REPLACE INTO preferences VALUES(?,?)", arrayOf(key, value))
     }
+    @Synchronized fun putAll(values: Map<String, String>) {
+        db.beginTransaction()
+        try {
+            values.forEach { (key, value) -> put(key, value) }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
     @Synchronized fun phrases(code: String? = null): List<Candidate> {
         val sql = if (code == null) "SELECT text,code FROM phrases ORDER BY code,text" else "SELECT text,code FROM phrases WHERE code=? ORDER BY text"
         return db.rawQuery(sql, code?.let { arrayOf(it) }).use { cursor ->

@@ -33,7 +33,7 @@
 - 新增 8 组检查：离线多音/整词/繁体/补充区/缺失读音；44dp 读音行完整排版和边界测量；Z 切换、精确候选与选字恢复；真实横滑不误上屏；词组及原展开网格读音；暂缓四码唯一及第五码自动上屏；退格清空和无匹配 Z；英文 z 正常输入。
 - 读音行在 0、20、120、320、2000dp 宽度下不越界，拼音保持两行内部排版、不出现省略号。原展开网格读音模式为两列，普通模式为三列。
 - 既有回车三设置界面检查补充 z 的上屏、清除与无首选保留编码；原候选选择、简繁、英文补全、数字行、字根、emoji、符号、剪贴板和服务生命周期回归通过。
-- 已人工查看并归档：[多音字与新 Z 图标](screenshots/28-polyphone-readings-0.2.0.png)、[词组读音](screenshots/29-phrase-readings-0.2.0.png)、[展开读音网格](screenshots/30-expanded-readings-0.2.0.png)。
+- 已人工查看并归档：[多音字与新 Z 图标](../screenshots/28-polyphone-readings-0.2.0.png)、[词组读音](../screenshots/29-phrase-readings-0.2.0.png)、[展开读音网格](../screenshots/30-expanded-readings-0.2.0.png)。
 
 ## 安装包与真机
 
