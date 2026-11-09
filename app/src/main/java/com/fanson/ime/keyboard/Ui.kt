@@ -6,6 +6,10 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.ForegroundColorSpan
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -48,6 +52,17 @@ class Ui(val context: Context, val palette: Palette) {
         setOnClickListener { action() }
         contentDescription = label
     }
+    fun punctuationButton(primary: String, alternate: String, insert: (String) -> Unit): Button =
+        button(primary) { insert(primary) }.apply {
+            text = SpannableString("$alternate\n$primary").apply {
+                setSpan(AbsoluteSizeSpan(10, true), 0, alternate.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                setSpan(ForegroundColorSpan(palette.muted), 0, alternate.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            maxLines = 2
+            includeFontPadding = false
+            stateDescription = "长按输入$alternate"
+            setOnLongClickListener { insert(alternate); true }
+        }
     fun iconButton(icon: Int, description: String, accent: Boolean = false, action: () -> Unit): Button =
         button("", accent, action).apply {
             foreground = context.getDrawable(icon)!!.mutate().apply { setTint(if (accent) palette.accentInk else palette.ink) }

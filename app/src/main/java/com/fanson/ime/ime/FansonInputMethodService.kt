@@ -578,11 +578,11 @@ class FansonInputMethodService : InputMethodService() {
             else resolveThen { spelling = !spelling; renderBody(); renderCandidates() }
         }.apply { isSelected = spelling && !password; isEnabled = !password }
         ui.addWeighted(bottom, languageKey, 1.2f, keyHeight)
-        ui.addWeighted(bottom, ui.button(if (chinese) "，" else ",") { punct(if (chinese) "，" else ",") }, .8f, keyHeight)
-        val space = spaceButton()
+        ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "，" else ",", if (chinese) "！" else "!", ::punct), .8f, keyHeight)
+        val space = spaceButton(showLanguage = true)
         space.setOnLongClickListener { showCursorControls(); true }
         ui.addWeighted(bottom, space, 3.3f, keyHeight)
-        ui.addWeighted(bottom, ui.button(if (chinese) "。" else ".") { punct(if (chinese) "。" else ".") }, .8f, keyHeight)
+        ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "。" else ".", if (chinese) "？" else "?", ::punct), .8f, keyHeight)
         ui.addWeighted(bottom, enterButton(), 1.4f, keyHeight)
         container.addView(bottom)
         updatePronunciationKey()
@@ -642,7 +642,7 @@ class FansonInputMethodService : InputMethodService() {
         val row = ui.row()
         ui.addWeighted(row, ui.button("返回键盘") { switchPanel("symbols") }, height = 44)
         ui.addWeighted(row, deleteButton(), height = 44)
-        ui.addWeighted(row, spaceButton(), height = 44)
+        ui.addWeighted(row, spaceButton(showLanguage = false), height = 44)
         ui.addWeighted(row, enterButton(), height = 44)
         container.addView(row)
     }
@@ -740,8 +740,8 @@ class FansonInputMethodService : InputMethodService() {
         }
     }
 
-    private fun spaceButton() = ui.button("␣ ${language.label}") { space() }.apply {
-        contentDescription = "空格"; stateDescription = language.label
+    private fun spaceButton(showLanguage: Boolean) = ui.button(if (showLanguage) "␣ ${language.label}" else "␣") { space() }.apply {
+        contentDescription = "空格"; stateDescription = if (showLanguage) language.label else null
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {

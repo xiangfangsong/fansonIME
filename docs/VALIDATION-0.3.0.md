@@ -40,3 +40,20 @@
 
 - [Unicode 韩文组合算法](https://www.unicode.org/versions/Unicode18.0.0/core-spec/chapter-3/)：现代音节组合与分解；仅参考标准，运行时不依赖在线资料。
 - [Microsoft 韩语输入说明](https://learn.microsoft.com/en-us/globalization/input/korean-ime)：PC 两式及 Shift 键位；本项目自行实现组字代码。
+
+## 2026-11-09 文档与命名整理补记
+
+本节记录统一英文名为 **FansonIME** 和补齐技术文档后的检查，应用仍为 0.3.0 / versionCode 14。以上 2026-11-08 的 APK 路径、哈希、87 项模拟器及真机记录保留原意，不表示本次重新运行。更名范围与保留标识见 [命名约定](technical/NAMING.md)。
+
+本次已执行：
+
+- `powershell -NoProfile -ExecutionPolicy Bypass -File tools\build_debug.ps1 -Offline`：退出码 0，`BUILD SUCCESSFUL`；资源校验、Debug APK 和 androidTest APK 编译成功。
+- JVM XML 报告：8 个测试套件，共 103 项，0 失败、0 错误、0 跳过；Lint XML 报告 0 项问题。
+- 静态核对：技术文档及开发约定的本地链接、UTF-8、代码围栏和空白检查通过；Python 工具及模拟器启动脚本语法检查通过；`git diff --check` 通过。
+- 与源码基线比较：应用构建身份配置、Manifest、输入法/备份 XML、中文名称资源、输入引擎、数据实现、锁记录及资源元数据未变；资源哈希校验通过。
+- 最终 APK 经 `aapt` 核对应用 ID 为 `com.fanson.ime`，版本仍为 14 / 0.3.0，中文名称为“放松输入法”，Activity 与 IME 组件未改，仍仅申请 `VIBRATE`；新英文名已包含在 APK 代码与项目自写许可说明中。
+- `apksigner verify --verbose --print-certs` 通过 v2 签名校验，签名证书 SHA-256 与原 `dist/fansonIME-0.3.0-debug.apk` 一致。本次未覆盖原归档、未安装设备。
+
+本次生成 APK：`app/build/outputs/apk/debug/app-debug.apk`，10,185,228 字节；SHA-256：`f3c9a0744d5d9bc562d43762d84bb85898d397b20745ce65cbccddcd5a1f5cf6`。今后新归档按 `FansonIME-<版本>-debug.apk` 命名。
+
+未执行模拟器/真机交互、实际覆盖升级、关于页视觉验收和 release 构建。本次没有修改输入逻辑，身份/数据配置与签名核对支持升级兼容性判断，但不替代设备验证。构建出现 SDK XML 版本提示与现有状态栏 API 弃用警告，未阻断构建，未在命名调整中扩展处理。

@@ -124,7 +124,8 @@ class MainActivity : Activity() {
         }
         page.addView(clear, LinearLayout.LayoutParams(-1, dp(48)))
         section("关于")
-        page.addView(ui.text("放松输入法 ${com.fanson.ime.BuildConfig.VERSION_NAME} · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0\n读音：pinyin-data / phrase-pinyin-data · MIT", 13f, ui.palette.muted))
+        val versionName = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+        page.addView(ui.text("放松输入法 · FansonIME $versionName · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0\n读音：pinyin-data / phrase-pinyin-data · MIT", 13f, ui.palette.muted))
         page.addView(ui.button("第三方数据与许可") { showLicenses() }, LinearLayout.LayoutParams(-1, dp(48)))
         refreshStatus()
     }

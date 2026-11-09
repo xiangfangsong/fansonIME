@@ -12,7 +12,7 @@ $avdPath = Join-Path $avdRoot 'fansonIME_API31.avd'
 New-Item -ItemType Directory -Path $avdPath -Force | Out-Null
 $config = @'
 AvdId=fansonIME_API31
-avd.ini.displayname=fansonIME Android 12 Test
+avd.ini.displayname=FansonIME Android 12 Test
 PlayStore.enabled=true
 abi.type=x86_64
 hw.cpu.arch=x86_64

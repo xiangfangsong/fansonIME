@@ -38,7 +38,7 @@
 - 字根键位事实参考 [riku-ri/wubi-kb](https://github.com/riku-ri/wubi-kb)，revision `c65590f6a524fa7cb9459d2095be87d22bd839fc`，逐键来源及校验值见 `third_party/wubi_roots/keys.json`；包括基本字根及变形字根，共 25 键、258 项。
 - 字形来自上游 font Release 的 `UMingCN-wubi-86-kb.ttf`，原始 SHA-256 为 `4b9d2a7a2473ff39e097565e8906875fbe1097deac7e0891c0b150244d71223a`。该字体以 CJK-Unifonts / AR PL UMing CN 为基础，为五笔特殊字根修改了部分字形。
 - 字体按 **ARPHIC PUBLIC LICENSE** 提供。完整许可、原始版权与上游修改声明保存在 `third_party/wubi_roots/`，同时随 APK 打包并在“第三方数据与许可”展示。
-- fansonIME 于 2026-11-08 仅保留所需字形并重命名为 **Fanson Wubi Roots**，字形轮廓不变；修改声明写入字体 name 表。派生字体随 APK 和项目提供，继续按原许可自由复制、修改、再分发，不提供担保。
+- FansonIME 于 2026-11-08 仅保留所需字形并重命名为 **Fanson Wubi Roots**，字形轮廓不变；修改声明写入字体 name 表，保留生成时的项目名旧拼写（见[命名约定](technical/NAMING.md)）。派生字体随 APK 和项目提供，继续按原许可自由复制、修改、再分发，不提供担保。
 - `tools/prepare_root_data.py --source-font PATH` 使用 FontTools 4.55.8 校验原始字体并重建约 83 KB 子集；源字体下载地址和校验值见 `resources.lock.json`。构建不会联网下载字体。专用字体仅用于卡片，不影响正文的系统字体。
 
 ## 离线候选读音

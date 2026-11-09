@@ -18,7 +18,7 @@ LOCK = ROOT / "resources.lock.json"
 
 
 def download(url):
-    request = urllib.request.Request(url, headers={"User-Agent": "fansonIME-build/0.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "FansonIME-build/0.1"})
     with urllib.request.urlopen(request, timeout=60) as response:
         return response.read()
 

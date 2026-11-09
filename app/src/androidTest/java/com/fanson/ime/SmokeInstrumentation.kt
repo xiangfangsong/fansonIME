@@ -115,6 +115,13 @@ class SmokeInstrumentation : Instrumentation() {
             waitForIdleSync()
             check(targetContext.applicationInfo.loadLabel(targetContext.packageManager).toString() == "放松输入法")
             passed += "application_name"
+            val installedVersion = targetContext.packageManager.getPackageInfo(targetContext.packageName, 0).versionName
+            runOnMainSync {
+                check(allViews(activity.window.decorView).filterIsInstance<TextView>().any {
+                    it.text.toString().startsWith("放松输入法 · FansonIME $installedVersion · Android 12+")
+                })
+            }
+            passed += "application_about_version_matches_installed_package"
             runOnMainSync {
                 val ui = Ui(targetContext, Palette.of(targetContext, "light"))
                 var selected: Candidate? = null
@@ -656,6 +663,84 @@ class SmokeInstrumentation : Instrumentation() {
             runOnMainSync { editor.setText("") }
             screenshot("01-keyboard")
             checkCandidateArea(false)
+            InputLanguage.entries.forEach { language ->
+                chooseLanguage(language)
+                runOnMainSync { check(findButtonOnMain("空格").text.toString() == "␣ ${language.label}") }
+                click("符号")
+                await { findButton("返回键盘") != null }
+                checkCandidateArea(false)
+                runOnMainSync {
+                    val space = findButtonOnMain("空格")
+                    check(space.text.toString() == "␣" && space.stateDescription == null)
+                }
+                val beforeSpace = editor.text.toString()
+                click("空格"); await { editor.text.toString() == beforeSpace + " " }
+                if (language == InputLanguage.WUBI) screenshot("35-symbol-space-0.3.1")
+                click("返回键盘")
+                await { findButton("␣ ${language.label}") != null }
+            }
+            passed += "space_language_label_only_on_keyboard_symbol_space_in_all_languages"
+            InputLanguage.entries.forEach { language ->
+                chooseLanguage(language)
+                val comma = if (language == InputLanguage.WUBI) "，" else ","
+                val period = if (language == InputLanguage.WUBI) "。" else "."
+                val exclamation = if (language == InputLanguage.WUBI) "！" else "!"
+                val question = if (language == InputLanguage.WUBI) "？" else "?"
+                runOnMainSync { editor.setText("") }
+                await {
+                    var correct = false
+                    runOnMainSync {
+                        correct = listOf(comma to exclamation, period to question).all { (primary, alternate) ->
+                            val button = windows().filterIsInstance<Button>().firstOrNull {
+                                visible(it) && it.contentDescription == primary
+                            }
+                            val layout = button?.layout
+                            button?.text.toString() == "$alternate\n$primary" &&
+                                button?.stateDescription == "长按输入$alternate" && layout != null &&
+                                layout.lineCount == 2 && layout.getLineTop(0) < layout.getLineTop(1) &&
+                                layout.getEllipsisCount(0) == 0 && layout.getEllipsisCount(1) == 0
+                        }
+                    }
+                    correct
+                }
+                click(comma); click(period)
+                await { editor.text.toString() == comma + period }
+                longPress(comma); await { editor.text.toString() == comma + period + exclamation }
+                longPress(period); await { editor.text.toString() == comma + period + exclamation + question }
+                screenshot(when (language) {
+                    InputLanguage.WUBI -> "36-punctuation-long-press-0.3.1"
+                    InputLanguage.ENGLISH -> "37-english-punctuation-0.3.1"
+                    InputLanguage.KOREAN -> "38-korean-punctuation-0.3.1"
+                })
+            }
+            passed += "all_languages_punctuation_hints_above_primary_short_tap_and_real_long_press"
+            chooseLanguage(InputLanguage.ENGLISH)
+            runOnMainSync { editor.setText("") }
+            click("a"); await { editor.text.toString() == "a" }
+            longPress(","); await { editor.text.toString() == "a!" }
+            click("b"); await { editor.text.toString() == "a!b" }
+            longPress("."); await { editor.text.toString() == "a!b?" }
+            chooseLanguage(InputLanguage.KOREAN)
+            runOnMainSync { editor.setText("") }
+            runOnMainSync { findKeyboardButton('r').performClick(); findKeyboardButton('k').performClick() }
+            await { editor.text.toString() == "가" }
+            longPress(","); await { editor.text.toString() == "가!" }
+            runOnMainSync { findKeyboardButton('s').performClick(); findKeyboardButton('k').performClick() }
+            await { editor.text.toString() == "가!나" }
+            longPress("."); await { editor.text.toString() == "가!나?" }
+            passed += "english_and_korean_long_press_confirms_composition_before_ascii_punctuation"
+            chooseLanguage(InputLanguage.WUBI)
+            runOnMainSync { editor.setText("") }
+            click("a"); await { findText("编码：a") != null }
+            longPress("，"); await { editor.text.toString() == "工！" && findText("编码：a") == null }
+            runOnMainSync { editor.setText("") }
+            click("Z / 查读音"); await { findText("编码：z") != null }
+            longPress("。")
+            runOnMainSync { check(editor.text.isEmpty()) }
+            await { findText("编码：z") != null }
+            click("退格"); await { findText("编码：z") == null }
+            runOnMainSync { check(editor.text.isEmpty()) }
+            passed += "punctuation_long_press_resolves_candidate_and_preserves_unmatched_code"
             click("123"); await { findButton("返回") != null }
             checkCandidateArea(false)
             runOnMainSync {
@@ -886,6 +971,11 @@ class SmokeInstrumentation : Instrumentation() {
             click("五笔搜索 emoji")
             await { findButton("关键词：输入中文") != null }
             checkCandidateArea(false)
+            longPress("，"); await { findButton("关键词：！") != null }
+            longPress("。"); await { findButton("关键词：！？") != null }
+            runOnMainSync { check(editor.text.toString() == "工a") }
+            click("清空"); await { findButton("关键词：输入中文") != null }
+            passed += "punctuation_long_press_emoji_search_target_isolation"
             listOf("t", "t", "d", "u").forEach { click(it) }
             await { findText("搜索编码：ttdu") != null }
             await { findButton("笑") != null }
@@ -1104,6 +1194,24 @@ class SmokeInstrumentation : Instrumentation() {
             val buttons = windows().filterIsInstance<Button>().filter { (it.text.toString() == label || it.contentDescription?.toString() == label) && visible(it) }
             (if (last) buttons.last() else buttons.first()).performClick()
         }
+        waitForIdleSync()
+    }
+    private fun longPress(label: String) {
+        await { findButton(label) != null }
+        val location = IntArray(2)
+        var x = 0f
+        var y = 0f
+        runOnMainSync {
+            val button = findButtonOnMain(label)
+            check(button.isLongClickable)
+            button.getLocationOnScreen(location)
+            x = location[0] + button.width / 2f
+            y = location[1] + button.height / 2f
+        }
+        val down = SystemClock.uptimeMillis()
+        sendPointerSync(android.view.MotionEvent.obtain(down, down, android.view.MotionEvent.ACTION_DOWN, x, y, 0))
+        SystemClock.sleep(android.view.ViewConfiguration.getLongPressTimeout() + 150L)
+        sendPointerSync(android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_UP, x, y, 0))
         waitForIdleSync()
     }
     private fun chooseLanguage(language: InputLanguage) {
