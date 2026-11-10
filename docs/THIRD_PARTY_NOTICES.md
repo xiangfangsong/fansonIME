@@ -1,5 +1,7 @@
 # 第三方数据与构建工具
 
+项目原创代码和文档采用根目录的 [Apache License 2.0](../LICENSE)。本页列出的第三方内容及其派生产物继续遵循各自许可；项目主许可证不替代其版权声明、署名、源码或数据提供及相同方式共享等适用义务。许可范围见 [项目 README](../README.md#许可证)。
+
 ## Rime 五笔 86 码表
 
 - 上游：https://github.com/rime/rime-wubi
@@ -35,11 +37,11 @@
 
 ## 五笔86字根卡片与专用字体
 
-- 字根键位事实参考 [riku-ri/wubi-kb](https://github.com/riku-ri/wubi-kb)，revision `c65590f6a524fa7cb9459d2095be87d22bd839fc`，逐键来源及校验值见 `third_party/wubi_roots/keys.json`；包括基本字根及变形字根，共 25 键、258 项。
+- 字根键位事实参考 [riku-ri/wubi-kb](https://github.com/riku-ri/wubi-kb)，revision `c65590f6a524fa7cb9459d2095be87d22bd839fc`，逐键来源及校验值见 `third_party/wubi_roots/keys.json`；原始提取表 25 键、258 项保留不变。2026-11-10 通过 `tools/wubi_root_corrections.json` 修正 B/L/O/P，当前 262 项；键位及笔形事实另参考 [五笔拆解查询](https://hantang.github.io/search-wubi/wiki/roots/)及其繁简字根图、[Benber 字根说明](https://wubi.benber.net/guide/roots)，未复制参考图或字体。
 - 字形来自上游 font Release 的 `UMingCN-wubi-86-kb.ttf`，原始 SHA-256 为 `4b9d2a7a2473ff39e097565e8906875fbe1097deac7e0891c0b150244d71223a`。该字体以 CJK-Unifonts / AR PL UMing CN 为基础，为五笔特殊字根修改了部分字形。
 - 字体按 **ARPHIC PUBLIC LICENSE** 提供。完整许可、原始版权与上游修改声明保存在 `third_party/wubi_roots/`，同时随 APK 打包并在“第三方数据与许可”展示。
-- FansonIME 于 2026-11-08 仅保留所需字形并重命名为 **Fanson Wubi Roots**，字形轮廓不变；修改声明写入字体 name 表，保留生成时的项目名旧拼写（见[命名约定](technical/NAMING.md)）。派生字体随 APK 和项目提供，继续按原许可自由复制、修改、再分发，不提供担保。
-- `tools/prepare_root_data.py --source-font PATH` 使用 FontTools 4.55.8 校验原始字体并重建约 83 KB 子集；源字体下载地址和校验值见 `resources.lock.json`。构建不会联网下载字体。专用字体仅用于卡片，不影响正文的系统字体。
+- FansonIME 于 2026-11-08 仅保留所需字形并重命名为 **Fanson Wubi Roots**，当时字形轮廓不变；该历史声明与项目名旧拼写保留（见[命名约定](technical/NAMING.md)）。2026-11-10 补齐字形，并从 U+793B（礻）移除末尾右点派生独立的 U+E000，表示“礻去末点／衤去末两笔”；其余现有字形轮廓不变。本次修改声明追加到字体 name 表及 APK 的 `WUBI-ROOTS-NOTICE.txt`。派生字体随 APK 和项目提供，继续按原许可自由复制、修改、再分发，不提供担保。
+- `tools/prepare_root_data.py --source-font PATH` 使用 FontTools 4.55.8 校验原始字体并重建 84,952 字节子集；源字体下载地址和校验值见 `resources.lock.json`。构建不会联网下载字体。专用字体仅用于卡片，不影响正文的系统字体。
 
 ## 离线候选读音
 

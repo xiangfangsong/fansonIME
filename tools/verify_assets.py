@@ -37,7 +37,19 @@ words = (ASSETS / 'english.txt').read_text(encoding='utf-8').splitlines()
 roots = json.loads((ASSETS / 'wubi_roots.json').read_text(encoding='utf-8'))
 assert set(roots['keys']) == set('abcdefghijklmnopqrstuvwxy')
 assert all(roots['keys'][key] for key in roots['keys'])
-assert sum(map(len, roots['keys'].values())) == info['wubi_root_forms'] == 258
+assert sum(map(len, roots['keys'].values())) == info['wubi_root_forms'] == 262
+original_roots = json.loads((ROOT / 'third_party/wubi_roots/keys.json').read_text(encoding='utf-8'))
+corrections = json.loads((ROOT / 'tools/wubi_root_corrections.json').read_text(encoding='utf-8'))
+assert set(corrections['keys']) == set('blop')
+assert roots['local_corrections'] == corrections
+assert roots['sources'] == original_roots['sources']
+for key, values in original_roots['keys'].items():
+    assert roots['keys'][key] == corrections['keys'].get(key, values), key
+assert {'田', '力', '車'} <= set(roots['keys']['l'])
+assert '火' in roots['keys']['o'] and '耳' in roots['keys']['b']
+assert '\ue000' in roots['keys']['p']
+assert not {'礻', '衤'} & set(roots['keys']['p'])
+assert all('{' not in values and '}' not in values for values in roots['keys'].values())
 assert (ASSETS / 'fonts/fanson_wubi_roots.ttf').stat().st_size < 200000
 assert len(words) == info['english_words'] and len(set(words)) == len(words)
 assert all(word.isascii() and word.isalpha() and word.islower() for word in words)

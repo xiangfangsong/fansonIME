@@ -43,7 +43,9 @@ class WubiRootCard(private val ui: Ui) {
             grid.addView(ui.text(roots.getString(index), 30f).apply {
                 typeface = this@WubiRootCard.typeface
                 gravity = Gravity.CENTER
-                contentDescription = "${key.uppercaseChar()} 键字根第${index + 1}项"
+                contentDescription = if (roots.getString(index) == "\uE000")
+                    "${key.uppercaseChar()} 键字根：礻去末点，衤去末两笔"
+                else "${key.uppercaseChar()} 键字根第${index + 1}项"
                 setPadding(0, 0, 0, 0)
             }, GridLayout.LayoutParams().apply { this.width = (width - context.dp(24)) / columns; height = context.dp(42) })
         }

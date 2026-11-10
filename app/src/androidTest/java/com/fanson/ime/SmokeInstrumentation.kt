@@ -621,6 +621,31 @@ class SmokeInstrumentation : Instrumentation() {
             screenshot("20-n-full-roots")
             click("1"); await { findText("N 键 · 五笔86字根") == null && editor.text.toString() == "a1" }
             passed += "root_cards_complete_shapes_no_input_preserve_code_close_on_typing"
+            click("a"); await { findText("编码：a") != null }
+            for ((key, expected) in mapOf(
+                'l' to listOf("田", "甲", "囗", "四", "皿", "罒", "⺲", "曾", "柬", "车", "車", "力", "卌", "冊"),
+                'o' to listOf("火", "业", "兼", "灬", "亦", "米"),
+                'p' to listOf("之", "⻌", "辶", "廴", "冖", "宀", "\uE000"),
+                'b' to listOf("子", "孑", "了", "也", "耳", "巜", "阝", "卩", "⺋", "服", "卫", "予", "凵")
+            )) {
+                runOnMainSync { check(findKeyboardButton(key).performLongClick()) }
+                await { findText("${key.uppercaseChar()} 键 · 五笔86字根") != null }
+                runOnMainSync {
+                    val grid = windows().filterIsInstance<android.widget.GridLayout>().first { visible(it) && it.contentDescription == "完整字根网格" }
+                    val cells = (0 until grid.childCount).map { grid.getChildAt(it) as android.widget.TextView }
+                    check(cells.map { it.text.toString() } == expected)
+                    check(cells.all { android.text.TextPaint().apply { typeface = it.typeface }.hasGlyph(it.text.toString()) })
+                    if (key == 'p') check(cells.last().contentDescription == "P 键字根：礻去末点，衤去末两笔")
+                    check(editor.text.toString() == "a1")
+                }
+                screenshot("43-corrected-roots-$key")
+                click("关闭字根卡片")
+                await { findText("${key.uppercaseChar()} 键 · 五笔86字根") == null }
+                await { findText("编码：a") != null }
+            }
+            click("退格"); await { findText("编码：a") == null }
+            check(editor.text.toString() == "a1")
+            passed += "corrected_blop_roots_glyphs_preserve_composition_and_body"
             chooseLanguage(InputLanguage.ENGLISH); await { findButton("␣ English") != null }
             runOnMainSync { check(!findKeyboardButton('q').isLongClickable) }
             chooseLanguage(InputLanguage.WUBI); await { findButton("␣ 五笔86") != null }

@@ -3,13 +3,14 @@
 字根键位事实参考 riku-ri/wubi-kb：
 https://github.com/riku-ri/wubi-kb
 固定 revision：c65590f6a524fa7cb9459d2095be87d22bd839fc
-逐键来源及校验值保存在 wubi_roots.json。卡片包括该表的基本字根及变形字根。
+逐键来源及校验值保存在 wubi_roots.json。上游原始提取表保留在 third_party/wubi_roots/keys.json；2026-11-10 仅对 B、L、O、P 应用 tools/wubi_root_corrections.json 的本地校正，其他键不变。当前共 25 键、262 个基本及变形字根。
+校正事实参考：https://hantang.github.io/search-wubi/wiki/roots/ 及其五笔86繁简字根图、https://wubi.benber.net/guide/roots 。只参考键位和笔形事实，未复制参考图或其字体。
 
 字根字形来自 UMingCN-wubi-86-kb.ttf：
 https://github.com/riku-ri/wubi-kb/releases/tag/font
 原始 SHA-256：4b9d2a7a2473ff39e097565e8906875fbe1097deac7e0891c0b150244d71223a
 原始字体作者和版权见 FONT-COPYRIGHT.txt，上游字形修改声明见 UPSTREAM-FONT-CHANGES.adoc。
 
-FansonIME 于 2026-11-08 仅保留字根所需字形并重命名为 Fanson Wubi Roots，未更改字形轮廓。修改声明也写入字体 name 表，保留生成时项目名的旧拼写。派生字体按 ARPHIC PUBLIC LICENSE 提供，可自由复制、修改与再分发；不提供担保，完整许可见 ARPHICPL.TXT。字体文件 fonts/fanson_wubi_roots.ttf 随 APK 分发，项目提供 keys.json 与 prepare_root_data.py 以供重建。
+FansonIME 于 2026-11-08 仅保留字根所需字形并重命名为 Fanson Wubi Roots，未更改字形轮廓；该历史修改声明保留。2026-11-10 补齐所需字形，并从原字体 U+793B（礻）派生 U+E000：移除末尾右点，保留首点、横撇和竖，表示“礻去末点／衤去末两笔”的共同字根。除这一新增字形外，原有字形轮廓不变。两次修改声明均写入字体 name 表。派生字体按 ARPHIC PUBLIC LICENSE 提供，可自由复制、修改与再分发；不提供担保，完整许可见 ARPHICPL.TXT。字体文件 fonts/fanson_wubi_roots.ttf 随 APK 分发，项目提供 keys.json、本地校正及 prepare_root_data.py 以供重建。
 
 字根字体只用于卡片展示，不用于输入正文；查看卡片不提交任何编码或文字。
