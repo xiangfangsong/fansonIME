@@ -10,7 +10,7 @@
 | 原始数据 | [`third_party/`](../../third_party) | 保留码表、OpenCC、Unicode/CLDR、英文词频、读音及许可资料 |
 | 随 APK 分发的产物 | [`app/src/main/assets/`](../../app/src/main/assets) | SQLite、JSON、TSV、词表、字根字体及许可文件 |
 | 产物元数据 | [`data_info.json`](../../app/src/main/assets/data_info.json) | 产物哈希、数量及 revision；运行时用其中哈希准备 SQLite 副本 |
-| 用户数据 | `context.noBackupFilesDir/personal.db` | 可写 SQLite，保存设置、手动短语、emoji 次数、剪贴板历史 |
+| 用户数据 | `context.noBackupFilesDir/personal.db` | 可写 SQLite，保存设置、手动短语、五笔衰减词频、emoji 次数、剪贴板历史 |
 | 字典运行副本 | `noBackupFilesDir/wubi-<哈希前12位>.db`、`pronunciation-<哈希前12位>.db` | 只读打开，由 assets 复制而来，与个人数据分开 |
 
 两个字典仓库都在目标文件不存在时：复制到固定临时文件 → 计算完整 SHA-256 → 与元数据比对 → rename 为带哈希文件名 → 只读打开。已有目标文件会直接打开，目前不重新计算其哈希；也没有自动清除旧哈希副本或损坏副本自愈。
@@ -43,6 +43,8 @@ PRAGMA user_version=1;
 
 因此“40”只是前缀补足目标，不是所有候选的统一上限；手动短语没有同样的数量限制，精确查询也可使总数超过 40。UI 展开页使用已查出的同一快照，并不继续从数据库加载下一页。短语目前只参与当前码的精确匹配，不参与前缀补全。
 
+0.4.0 开启学习时，上述基础查询后最多补回当前输入码下 64 个已学习的有效内置来源，再于简繁转换后按三层内的有效分数稳定排序。历史来源必须通过绑定 SQL 核对，不直接生成候选；关闭开关、隐私字段和内部搜索仍走原查询。完整键、截断边界与算法见 [五笔词频说明](WUBI_FREQUENCY.md)。
+
 ## 读音与简繁
 
 读音库结构：
@@ -63,7 +65,7 @@ PRAGMA user_version=1;
 
 ## 个人数据库
 
-`LocalStore` 直接打开 SQLite，启动时启用 `PRAGMA secure_delete=ON` 并创建下表。当前 `db.version=1`；首次低于 1 时删除旧 `favorites` 表。没有 SQLiteOpenHelper 或通用多版本迁移框架。
+`LocalStore` 直接打开 SQLite，启动时启用 `PRAGMA secure_delete=ON` 并创建下表。当前 `db.version=2`。schema 初始化由进程公共锁保护；事务建旧表，首次低于 1 时保留原删除旧 `favorites` 的处理，低于 2 时仅新增 `wubi_frequency` 并升至 2，不清旧数据。启用 WAL 以减少隐藏批写阻塞其他连接读取；仍没有 SQLiteOpenHelper 或通用迁移框架。version 1 合成旧库保留验证见本版记录。
 
 | 表 | 字段与约束 | 写入及清除规则 |
 | --- | --- | --- |
@@ -72,9 +74,11 @@ PRAGMA user_version=1;
 | `clipboard_history` | `id INTEGER PRIMARY KEY AUTOINCREMENT,text TEXT NOT NULL UNIQUE` | 非空白、非敏感文本入库；事务内先删重复、再插入、仅留最大 10 个 id；读取倒序 |
 | `emoji_usage` | `text TEXT PRIMARY KEY,uses INTEGER NOT NULL,last_used INTEGER NOT NULL` | 事务内累加次数；`last_used=当前最大值+1`，是顺序号，不是时间戳 |
 
+新增 `wubi_frequency(input_code,source_code,source_text,text,score,updated_at,custom)`，前四字段为复合主键；score 为 REAL，时间为 INTEGER 毫秒。最多两万条内存记录，模型及批快照由进程共享的 WubiFrequencyStore 维护，后台只在真实隐藏键盘时保存日常变化；显式清空/删除是立即持久化的例外。详细结构、生命周期及 WAL 边界见 [词频说明](WUBI_FREQUENCY.md)。
+
 各公开数据库操作用 `@Synchronized` 保护同一个 `LocalStore` 实例；Activity 和服务各开一个实例，不能依赖此注解获得跨实例的业务原子性。复合操作需要数据库事务。
 
-`clearPersonalData()` 只删除短语、emoji 次数并 `VACUUM`，保留设置与剪贴板历史。`clearClipboardHistory()` 仅清本地历史；面板“一键清空”另外调用系统剪贴板清除。`secure_delete` 与无备份配置不等于文件加密。
+原 `clearPersonalData()` 联合清空已移除。设置的三个独立确认分别通过共享词频 I/O 队列清短语、emoji 次数或五笔学习，保留设置和剪贴板；短语删除与相关失效学习在同一事务处理，无联合 VACUUM。清词频提升代数，旧反馈不再计入，串行保存不能复活清空数据。`clearClipboardHistory()` 仅清本地历史；面板“一键清空”另外调用系统剪贴板清除。`secure_delete` 与无备份配置不等于文件加密。
 
 ### 设置键契约
 
@@ -86,6 +90,7 @@ PRAGMA user_version=1;
 | `input_language` | `default_language` | 新输入框读取；主动切换成功或五笔 Shift 进入英文时保存；旧安装保留原值，未知值回退五笔；字段自动覆盖不保存 |
 | `last_non_english_language` | 无记录 | 最近成功主动选择或离开的非英语语言；英语短按优先返回它，缺失/未知/误存英语时用非英语默认语言，默认也是英语则回退五笔；修改默认语言时重设 |
 | `wubi_enter_action` | `commit_code` | `commit_code / clear_code / first_candidate`；读取设置后在 worker 更新；未知值回退默认 |
+| `wubi_frequency` | `true` | 仅五笔本地衰减排序，未知值回退开启；关闭恢复旧固定查询并停止学习，保留已有记录；隐私和搜索强制禁用 |
 | `auto_unique` | `true` | 四码唯一提交，读取后在 worker 更新 |
 | `fifth_commit` | `true` | 第五码提交，读取后在 worker 更新 |
 | `haptic` | `false` | 震动开关 |
@@ -134,6 +139,6 @@ python tools\verify_assets.py
 - `ClipboardController` 每次确认本应用是默认 IME，只读取每项已有的 `.text`；不使用 URI 强转或下载内容。全部为文本时用换行拼接，输出 TEXT/EMPTY/NON_TEXT/UNAVAILABLE 快照，捕获 `SecurityException`。
 - 服务在启动和复制回调调用 `captureClipboard()`；锁屏时跳过，在非 `privateField`、文本且非敏感时交给 store。监听属于服务生命周期，面板隐藏仍可记录；不能据此恢复安装前或未收到回调的历史。
 - 面板对敏感或隐私会话内容默认遮挡，可由用户主动显示；更换快照时重置显示授权。粘贴当前值前重新读取，若有变化要求重新选择；历史粘贴使用选中的历史文字。
-- 退出面板和失效会话释放快照与预览文字。emoji 成功提交且非 `privateField` 时才累加次数；普通输入及读音查询均不保存正文历史。
+- 退出面板和失效会话释放快照与预览文字。emoji 成功提交且非 `privateField` 时才累加次数；五笔只有开启学习、非隐私、非内部搜索且平台接受的候选提交才增加衰减分数，密码/隐私五笔也不使用个人排序。其余普通输入及读音查询不保存正文历史；词频不保存逐次事件或整段正文。
 
 Manifest 仅申请 `VIBRATE`；IME 服务导出并由 `BIND_INPUT_METHOD` 保护，启动 Activity 导出供桌面启用。`allowBackup=false` 同时配合 `backup_rules.xml`、`data_extraction_rules.xml` 排除云备份和设备迁移；数据位于无备份私有目录。无网络权限、无输入日志是维护约束，新增依赖、日志和外部组件时必须核对最终 APK。

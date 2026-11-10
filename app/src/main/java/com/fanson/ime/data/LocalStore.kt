@@ -4,23 +4,37 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.fanson.ime.engine.Candidate
 import com.fanson.ime.engine.Lexicon
+import com.fanson.ime.engine.FrequencyKey
+import com.fanson.ime.engine.FrequencyRecord
+import com.fanson.ime.engine.FrequencyBatch
 import com.fanson.ime.emoji.EmojiUsage
 import java.io.File
 
 data class ClipboardEntry(val id: Long, val text: String)
 
 /** Private no-backup storage, including the user's requested ten-item history. */
-class LocalStore(context: Context) : AutoCloseable {
-    private val db = SQLiteDatabase.openOrCreateDatabase(File(context.noBackupFilesDir, "personal.db"), null)
+class LocalStore(file: File) : AutoCloseable {
+    constructor(context: Context) : this(File(context.noBackupFilesDir, "personal.db"))
+    companion object { private val schemaLock = Any() }
+    private val db = SQLiteDatabase.openOrCreateDatabase(file, null)
     init {
-        db.rawQuery("PRAGMA secure_delete=ON", null).use { it.moveToFirst() }
-        db.execSQL("CREATE TABLE IF NOT EXISTS preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS phrases(code TEXT NOT NULL,text TEXT NOT NULL,PRIMARY KEY(code,text))")
-        db.execSQL("CREATE TABLE IF NOT EXISTS clipboard_history(id INTEGER PRIMARY KEY AUTOINCREMENT,text TEXT NOT NULL UNIQUE)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS emoji_usage(text TEXT PRIMARY KEY,uses INTEGER NOT NULL,last_used INTEGER NOT NULL)")
-        if (db.version < 1) {
-            db.execSQL("DROP TABLE IF EXISTS favorites")
-            db.version = 1
+        synchronized(schemaLock) {
+            // Readers should not wait for a hidden-keyboard frequency write transaction.
+            db.enableWriteAheadLogging()
+            db.rawQuery("PRAGMA secure_delete=ON", null).use { it.moveToFirst() }
+            db.beginTransaction()
+            try {
+                db.execSQL("CREATE TABLE IF NOT EXISTS preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS phrases(code TEXT NOT NULL,text TEXT NOT NULL,PRIMARY KEY(code,text))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS clipboard_history(id INTEGER PRIMARY KEY AUTOINCREMENT,text TEXT NOT NULL UNIQUE)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS emoji_usage(text TEXT PRIMARY KEY,uses INTEGER NOT NULL,last_used INTEGER NOT NULL)")
+                if (db.version < 1) db.execSQL("DROP TABLE IF EXISTS favorites")
+                if (db.version < 2) {
+                    db.execSQL("CREATE TABLE IF NOT EXISTS wubi_frequency(input_code TEXT NOT NULL,source_code TEXT NOT NULL,source_text TEXT NOT NULL,text TEXT NOT NULL,score REAL NOT NULL,updated_at INTEGER NOT NULL,custom INTEGER NOT NULL,PRIMARY KEY(input_code,source_code,source_text,text))")
+                    db.version = 2
+                }
+                db.setTransactionSuccessful()
+            } finally { db.endTransaction() }
         }
     }
     @Synchronized fun get(key: String, default: String): String = db.rawQuery(
@@ -39,7 +53,7 @@ class LocalStore(context: Context) : AutoCloseable {
     @Synchronized fun phrases(code: String? = null): List<Candidate> {
         val sql = if (code == null) "SELECT text,code FROM phrases ORDER BY code,text" else "SELECT text,code FROM phrases WHERE code=? ORDER BY text"
         return db.rawQuery(sql, code?.let { arrayOf(it) }).use { cursor ->
-            buildList { while (cursor.moveToNext()) add(Candidate(cursor.getString(0), cursor.getString(1))) }
+            buildList { while (cursor.moveToNext()) add(Candidate(cursor.getString(0), cursor.getString(1), custom = true)) }
         }
     }
     @Synchronized fun addPhrase(code: String, text: String) {
@@ -61,9 +75,39 @@ class LocalStore(context: Context) : AutoCloseable {
         } finally { db.endTransaction() }
     }
     @Synchronized fun clearEmojiUsage() { db.execSQL("DELETE FROM emoji_usage") }
-    @Synchronized fun clearPersonalData() {
-        db.execSQL("DELETE FROM phrases"); clearEmojiUsage()
-        db.execSQL("VACUUM")
+    @Synchronized fun clearPhrases() { db.execSQL("DELETE FROM phrases") }
+    @Synchronized fun frequencyRecords(): List<FrequencyRecord> = db.rawQuery(
+        "SELECT input_code,source_code,source_text,text,score,updated_at,custom FROM wubi_frequency ORDER BY updated_at DESC LIMIT 20000", null
+    ).use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) add(FrequencyRecord(
+                FrequencyKey(cursor.getString(0), cursor.getString(1), cursor.getString(2), cursor.getString(3)),
+                cursor.getDouble(4), cursor.getLong(5), cursor.getInt(6) != 0
+            ))
+        }
+    }
+    @Synchronized fun saveFrequency(batch: FrequencyBatch) {
+        if (batch.changes.isEmpty()) return
+        db.beginTransaction()
+        try {
+            batch.changes.forEach { (key, change) ->
+                val row = change.record
+                if (row == null) db.execSQL("DELETE FROM wubi_frequency WHERE input_code=? AND source_code=? AND source_text=? AND text=?",
+                    arrayOf(key.inputCode, key.sourceCode, key.sourceText, key.text))
+                else db.execSQL("INSERT OR REPLACE INTO wubi_frequency VALUES(?,?,?,?,?,?,?)",
+                    arrayOf(key.inputCode, key.sourceCode, key.sourceText, key.text, row.score, row.updatedAt, if (row.custom) 1 else 0))
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+    @Synchronized fun clearFrequency() { db.execSQL("DELETE FROM wubi_frequency") }
+    @Synchronized fun deletePhrasesWithFrequency(phrases: List<Pair<String, String>>, batch: FrequencyBatch) {
+        db.beginTransaction()
+        try {
+            phrases.forEach { (code, text) -> removePhrase(code, text) }
+            saveFrequency(batch)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
     }
     @Synchronized fun clipboardHistory(): List<ClipboardEntry> = db.rawQuery(
         "SELECT id,text FROM clipboard_history ORDER BY id DESC LIMIT 10", null
@@ -116,5 +160,24 @@ class WubiRepository(context: Context, private val personal: LocalStore) : Lexic
         }
         return result
     }
+    override fun lookupRemembered(code: String, remembered: List<Candidate>): List<Candidate> {
+        val result = lookup(code).toMutableList()
+        val seen = result.map { it.text }.toMutableSet()
+        val missing = remembered.filter {
+            it.text !in seen && it.code.startsWith(code) && it.code.length in code.length..4 && it.code.all { char -> char in 'a'..'y' }
+        }.distinctBy { it.code to it.text }.take(64)
+        // Bound both SQL length and bind count. Revalidate source rows; history is not a dictionary.
+        missing.chunked(64).forEach { chunk ->
+            val where = chunk.joinToString(" OR ") { "(code=? AND text=?)" }
+            val args = chunk.flatMap { listOf(it.code, it.text) }.toTypedArray()
+            db.rawQuery("SELECT text,code FROM entries WHERE $where ORDER BY length(code),weight DESC,text", args).use {
+                while (it.moveToNext()) if (seen.add(it.getString(0))) result += Candidate(it.getString(0), it.getString(1), it.getString(1) == code)
+            }
+        }
+        return result.filter { it.exact } + result.filterNot { it.exact }
+    }
+    fun containsBuiltin(code: String, text: String): Boolean = db.rawQuery(
+        "SELECT 1 FROM entries WHERE code=? AND text=? LIMIT 1", arrayOf(code, text)
+    ).use { it.moveToFirst() }
     override fun close() = db.close()
 }

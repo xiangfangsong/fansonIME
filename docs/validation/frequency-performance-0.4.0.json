@@ -1,0 +1,43 @@
+{
+  "environment": "API31 emulator; debug; synthetic data; not phone results",
+  "model_20000_approx_heap_delta_bytes": 4902624,
+  "rank_200_candidates_no_learning": {
+    "p50_ms": 8.96E-4,
+    "p95_ms": 9.79E-4,
+    "p99_ms": 0.00102
+  },
+  "rank_200_candidates_20000_same_prefix": {
+    "p50_ms": 0.116722,
+    "p95_ms": 0.237926,
+    "p99_ms": 0.358165
+  },
+  "recall64_from_20000_same_prefix": {
+    "p50_ms": 0.018867,
+    "p95_ms": 0.051803,
+    "p99_ms": 0.067217
+  },
+  "record_at_capacity": {
+    "p50_ms": 0.004293,
+    "p95_ms": 0.019375,
+    "p99_ms": 0.024603
+  },
+  "recall_from_20000_records_across625_input_codes": {
+    "p50_ms": 0.010986,
+    "p95_ms": 0.032332,
+    "p99_ms": 0.059873
+  },
+  "dictionary_fixed_a": {
+    "p50_ms": 1.06945,
+    "p95_ms": 1.564043,
+    "p99_ms": 1.955132
+  },
+  "engine_learning_a_with64_invalid_recall_sources": {
+    "p50_ms": 1.364106,
+    "p95_ms": 1.775747,
+    "p99_ms": 2.08319
+  },
+  "hidden_trim_and_snapshot_ms": 19.056083,
+  "hidden_initial_18000_rows_transaction_ms": 181.774899,
+  "hidden_one_row_transaction_ms": 0.888984,
+  "hidden_expire18000_and_snapshot_ms": 47.240421
+}

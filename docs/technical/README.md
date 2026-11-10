@@ -1,6 +1,6 @@
 # 技术文档入口
 
-这组文档记录 FansonIME 当前代码实现，供后续加功能、排查问题和重构时使用。当前已验收基线为 **0.3.3 / versionCode 18**，更新日期 **2026-11-09**；在 0.3.2 / `e71c76e` 基础上增加符号自动返回设置，准确提交标识以 Git 历史为准。命名变更见 [命名与兼容性约定](NAMING.md)，本版方案见 [符号输入后返回键盘](proposals/2026-11-09-symbol-auto-return.md)，验证见 [0.3.3 记录](../validation/VALIDATION-0.3.3.md)，历史验收见 [0.3.2 记录](../validation/VALIDATION-0.3.2.md)。
+这组文档记录 FansonIME 当前代码实现。当前开发版本为 **0.4.0 / versionCode 19**，2026-11-10 新增仅五笔的本地衰减词频；用户已在真机确认功能生效并授权提交，长期算法体验及耗电继续观察；未授权推送。上个已验收基线为 0.3.3 / 18（含字根修正），准确提交标识以 Git 历史为准。详细规则和维护入口见 [五笔词频](WUBI_FREQUENCY.md)，取舍见 [方案](proposals/2026-11-10-wubi-frequency.md)，本次证据见 [0.4.0 记录](../validation/VALIDATION-0.4.0.md)。命名边界见 [命名约定](NAMING.md)。
 
 后续开发遵循仓库根目录的 [AGENTS.md](../../AGENTS.md)。技术文档已按基线源码核对，但不承诺无遗漏；开始修改前必须核对相关源码和测试，发现偏差时同步修正文档。
 
@@ -27,6 +27,8 @@
 | 用户数据和五笔 SQL | [`LocalStore.kt`](../../app/src/main/java/com/fanson/ime/data/LocalStore.kt)，其中同时声明了 `WubiRepository` |
 | 候选条布局 | [`CandidateStrip.kt`](../../app/src/main/java/com/fanson/ime/keyboard/CandidateStrip.kt)、[`CandidateRowLayout.kt`](../../app/src/main/java/com/fanson/ime/keyboard/CandidateRowLayout.kt) |
 | 设置页面和偏好写入 | [`MainActivity.kt`](../../app/src/main/java/com/fanson/ime/settings/MainActivity.kt) |
+
+新增词频开发优先读 [五笔本地词频维护说明](WUBI_FREQUENCY.md)：参数、来源键、成功反馈、隐藏保存、并发、容量与迁移的完整契约。
 
 ## 本文档的约定
 

@@ -48,11 +48,15 @@ class SmokeInstrumentation : Instrumentation() {
             store.put("wubi_enter_action", "commit_code")
             store.put("number_row", "true")
             store.put("roots", "false")
+            passed += WubiFrequencyChecks.run(this)
             // Simulate an upgraded installation with no preference for this new setting.
             android.database.sqlite.SQLiteDatabase.openDatabase(
                 File(targetContext.noBackupFilesDir, "personal.db").absolutePath,
                 null, android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
-            ).use { it.delete("preferences", "key=?", arrayOf("symbol_auto_return")) }
+            ).use {
+                it.delete("preferences", "key=?", arrayOf("symbol_auto_return"))
+                it.delete("preferences", "key=?", arrayOf("wubi_frequency"))
+            }
             check(store.get("symbol_auto_return", "missing") == "missing")
             WubiRepository(targetContext, store).use { repository ->
                 check(repository.lookup("a").first().text == "工")
@@ -311,6 +315,7 @@ class SmokeInstrumentation : Instrumentation() {
                     if (shown) check((0 until rows.single().childCount).map { (rows.single().getChildAt(it) as Button).text.toString() } == "1234567890".map { it.toString() })
                 }
             }
+            checkFrequencyUi(activity, editor, ::refreshKeyboard)
             longPress("切换语言")
             runOnMainSync {
                 val menu = windows().filterIsInstance<android.widget.LinearLayout>().first { visible(it) && it.contentDescription == "输入语言列表" }
@@ -1289,6 +1294,7 @@ class SmokeInstrumentation : Instrumentation() {
             passed += "clipboard_record_keyboard_hidden"
             runOnMainSync { targetContext.getSystemService(ClipboardManager::class.java).clearPrimaryClip() }
             LocalStore(targetContext).use { it.clearClipboardHistory() }
+            LocalStore(targetContext).use { it.put("wubi_frequency", "true") }
             runOnMainSync { activity.finish() }
             finish(Activity.RESULT_OK, Bundle().apply { putString("passed", passed.joinToString(",")); putInt("count", passed.size) })
         } catch (error: Throwable) {
@@ -1304,6 +1310,99 @@ class SmokeInstrumentation : Instrumentation() {
         }
     }
     private fun allViews(view: View): List<View> = listOf(view) + if (view is ViewGroup) (0 until view.childCount).flatMap { allViews(view.getChildAt(it)) } else emptyList()
+    private fun checkFrequencyUi(activity: Activity, editor: EditText, refresh: () -> Unit) {
+        val store = LocalStore(targetContext)
+        val frequency = com.fanson.ime.data.WubiFrequencyStore.get(targetContext)
+        val model = frequency.model
+        val toggle = allViews(activity.window.decorView).filterIsInstance<android.widget.Switch>().first { it.text.toString() == "五笔按本地词频排序" }
+        runOnMainSync {
+            check(toggle.isChecked)
+            for (label in listOf("清空自定义短语", "清空 emoji 使用次数", "清空五笔词频")) {
+                check(allViews(activity.window.decorView).filterIsInstance<Button>().count { it.text.toString() == label } == 1)
+            }
+        }
+        passed += "frequency_default_enabled_and_three_independent_clear_buttons_ui"
+        store.addPhrase("a", "合成甲"); store.addPhrase("a", "合成乙")
+        val fixed = store.phrases("a").first().text
+        val chosen = store.phrases("a").last().text
+        refresh()
+        fun typeA() { runOnMainSync { findKeyboardButton('a').performClick() }; await { findText("编码：a") != null } }
+        fun firstCandidate(): String {
+            var text = ""
+            runOnMainSync {
+                val strip = windows().filterIsInstance<CandidateStrip>().first { visible(it) }
+                text = allViews(strip).filterIsInstance<Button>().first { visible(it) && it.text.isNotEmpty() }.text.toString()
+            }
+            return text
+        }
+        typeA(); await { findButton(chosen) != null }; click(chosen)
+        await { editor.text.toString() == chosen }
+        check(model.size == 1 && store.frequencyRecords().isEmpty())
+        typeA(); check(firstCandidate() == chosen)
+        screenshot("45-wubi-frequency-promoted-0.4.0")
+        click("空格"); await { editor.text.toString() == chosen + chosen }
+        check(store.frequencyRecords().isEmpty())
+        passed += "frequency_candidate_click_and_space_promote_in_memory_without_disk_ui"
+        click("收起键盘"); await { findButton("退格") == null }
+        WubiFrequencyChecks.edit(this) {}
+        check(store.frequencyRecords().single().score == 2.0 || store.frequencyRecords().single().score in 1.99..2.0)
+        passed += "frequency_actual_hide_button_flushes_successful_learning_ui"
+        runOnMainSync { toggle.isChecked = false; editor.setText("") }
+        refresh()
+        typeA(); check(firstCandidate() == fixed)
+        click("空格"); await { editor.text.toString() == fixed }
+        check(model.size == 1 && model.pendingSize == 0)
+        LocalStore(targetContext).use { check(it.get("wubi_frequency", "true") == "false") }
+        passed += "frequency_disabled_uses_fixed_order_stops_learning_and_persists_ui"
+        runOnMainSync { toggle.isChecked = true; editor.setText("") }
+        refresh(); typeA(); check(firstCandidate() == chosen); click("退格")
+        passed += "frequency_reenable_reuses_saved_learning_ui"
+        val originalOptions = editor.imeOptions
+        runOnMainSync {
+            editor.imeOptions = originalOptions or android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+            editor.setText("")
+        }
+        refresh(); typeA(); check(firstCandidate() == fixed); click(chosen)
+        await { editor.text.toString() == chosen }
+        check(model.pendingSize == 0 && model.size == 1)
+        passed += "frequency_no_personalized_learning_field_uses_fixed_order_and_does_not_record_ui"
+        runOnMainSync { editor.imeOptions = originalOptions; editor.setText("") }
+        refresh()
+        click("表情"); click("五笔搜索 emoji")
+        await { findButton("关键词：输入中文") != null }
+        runOnMainSync { findKeyboardButton('a').performClick() }
+        await { findText("搜索编码：a") != null }
+        check(firstCandidate() == fixed)
+        click(chosen); await { findButton("关键词：$chosen") != null }
+        check(editor.text.isEmpty() && model.pendingSize == 0)
+        click("‹ 键盘"); await { findButton("简") != null }
+        passed += "frequency_emoji_search_uses_fixed_order_without_learning_or_host_commit_ui"
+        click("收起键盘"); await { findButton("退格") == null }
+        store.recordEmojiUsage("😀")
+        fun confirm(label: String) {
+            runOnMainSync { allViews(activity.window.decorView).filterIsInstance<Button>().first { it.text.toString() == label }.performClick() }
+            click("清空")
+        }
+        confirm("清空 emoji 使用次数")
+        await { store.emojiUsage().isEmpty() }
+        check(store.phrases("a").size == 2 && model.size == 1)
+        confirm("清空五笔词频")
+        await { model.size == 0 && store.frequencyRecords().isEmpty() }
+        check(store.phrases("a").size == 2 && toggle.isChecked)
+        confirm("清空自定义短语")
+        await { store.phrases().isEmpty() }
+        runOnMainSync {
+            val button = allViews(activity.window.decorView).filterIsInstance<Button>().first { it.text.toString() == "清空五笔词频" }
+            button.requestRectangleOnScreen(android.graphics.Rect(0, 0, button.width, button.height), true)
+        }
+        SystemClock.sleep(3500) // Visual evidence: let Android's transient completion toast disappear.
+        screenshot("44-wubi-frequency-settings-0.4.0")
+        passed += "frequency_three_clear_dialogs_do_not_delete_other_categories_ui"
+        // Old fixed-order regression scenarios keep their original expectations.
+        runOnMainSync { toggle.isChecked = false; editor.setText(""); editor.requestFocus() }
+        refresh()
+        store.close()
+    }
     private fun checkCandidateArea(shown: Boolean) {
         // Panel switches resolve pending composition asynchronously. Inspect only
         // the active window and wait for its visibility/layout update to settle.

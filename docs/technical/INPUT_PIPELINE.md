@@ -6,8 +6,8 @@
 
 | 类型 | 含义 | 维护约束 |
 | --- | --- | --- |
-| `Candidate(text, code, exact, reading)` | 可提交文字、来源编码、是否精确匹配、展示读音 | 上屏只用 `text`；编码和读音只用于显示、选择及规则判断 |
-| `EngineResult(commits, hint, composing)` | 本次要依次提交的字符串、可选提示、可选 composing 更新 | `composing=null` 表示本次不更新 composing；空字符串与 `null` 含义不同 |
+| `Candidate(text, code, exact, reading, custom, sourceText)` | 可提交文字、来源编码、精确标志、读音、自定义来源、转换前文字 | 上屏只用 `text`；编码和读音只用于显示、选择及规则判断 |
+| `EngineResult(commits, hint, composing, selections)` | 依次提交的字符串、提示、composing 和五笔选词来源元数据 | `composing=null` 表示本次不更新 composing；空字符串与 `null` 含义不同 |
 | `InputEngine.code` | 当前临时输入 | 五笔是字母编码，英文是原始单词，韩语是当前字母/音节，不要统一假设为拉丁字母 |
 | `InputEngine.candidates` | 引擎当前候选列表 | 服务复制快照供 UI 使用；韩语始终为空 |
 | `backspace(): Boolean` | 引擎是否消费了一次退格 | `true` 时不删宿主正文；`false` 才交给搜索字符串或宿主删除 |
@@ -74,9 +74,17 @@ sequenceDiagram
 
 `z` 是独立分支：空码时进入待处理原始 `z`，不查 SQL；有候选时切换读音；有编码无候选时仅提示。读音状态在继续补码和非空退格时保留，在 reset 或退格清空后结束。读音期间同时暂停四码唯一与第五码自动提交，主动选词、空格、标点和回车仍遵循相应规则。
 
-候选刷新顺序为：原码查询 → 可选简繁转换 → 可选读音标注。因此繁体一简多繁会改变精确候选数量，影响四码唯一判断；所有提交路径使用转换后的候选。`reading` 永远不参与提交。
+候选刷新顺序为：原码查询与可选有效学习来源补回 → 可选简繁转换 → 可选五笔衰减分层排序 → 可选读音标注。因此繁体一简多繁会改变精确候选数量，影响四码唯一判断；所有提交路径使用转换后的候选。`reading` 永远不参与提交。
 
 `PhraseEncoder` 支持两字各取前两码、三字取前两字首码和第三字前两码、四字以上取前三字与末字首码。传入必须是每字完整码（2～4 位）；它目前只有算法与测试，设置页要求手工填写编码，没有自动取码生成入口。
+
+## 五笔学习反馈（0.4.0）
+
+每个真正候选提交附 `WubiSelection(commitIndex,inputCode,candidate)`；第五码在清除旧码前捕获来源，四码唯一同样附来源，空格/resolve/回车首选复用 select。原始编码、空格和附加标点无学习元数据。
+
+服务在入队时捕获 FrequencyPermit（五笔、开关、隐私、搜索及清空 epoch），在原 session 校验之后执行提交。enqueue 和独立 enter 均逐项检查 commitText 返回值，索引和文字与元数据吻合、资格有效且 epoch 未变才更新内存；不重新读取最终 code 推断旧选择，不因反馈重排已经发布的候选。删除刷新也应用当前学习资格。
+
+模型、索引、容量、保存中的 revision 和清除 epoch 不归输入会话所有，属于进程共享词频组件；临时编码和结果仍遵循原会话隔离。日常保存仅 onWindowHidden 触发，不改变输入线程或添加周期任务。详见 [五笔词频维护说明](WUBI_FREQUENCY.md)。
 
 ## 英文前缀补全
 

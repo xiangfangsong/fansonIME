@@ -1,6 +1,6 @@
 # 开发与验证
 
-基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.3.3 验证记录](../validation/VALIDATION-0.3.3.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。
+基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.4.0 验证记录](../validation/VALIDATION-0.4.0.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。
 
 ## 构建环境与命令
 
@@ -86,6 +86,14 @@ python tools\verify_assets.py
 0.3.3 增加五组符号自动返回检查：设置默认开启；三语言真实触摸完整符号后返回原语言；分类/空格/退格/回车不返回；关闭开关持久化及三语言连续输入保留分类；两种开关状态下 emoji 均可连续输入，重新开启后符号恢复返回。原符号分类连续输入回归显式关闭此开关，结束后恢复开启。
 
 2026-11-10 同版本字根修正增加一组仪器检查：逐一打开 L/O/P/B 卡片，核对完整列表、实际 Typeface 字形覆盖及 P 非成字根的无障碍名称；截图供人工检查笔形，同时确认原编码和宿主正文不变。资源检查比较原始表，保证其他 21 键不变。重建字体后另执行 `python tools/verify_root_font.py --source-font <原字体路径>`，核对所有现有轮廓/字宽及新 P 形态；普通构建仍不依赖 FontTools。当前同版本修正的验收状态独立记录在 [0.3.3 补记](../validation/VALIDATION-0.3.3.md#2026-11-10-字根修正补记)，不能沿用此前真机验收。
+
+## 0.4.0 五笔词频检查
+
+新增 WubiFrequencyTest 覆盖纯衰减/分层/容量/快照/代数及引擎提交元数据；WubiFrequencyChecks 使用 cacheDir 下明确命名的合成 version 1 fixture 验证增量迁移与旧数据保留，完成后仅删除该 fixture。数据检查覆盖批保存、补回来源、独立清空及同名内置兼容。
+
+SmokeInstrumentation 的 checkFrequencyUi 覆盖真实默认开关、后排提升、关闭固定回退、不学习、重新开启、真实收起保存、NO_PERSONALIZED_LEARNING、emoji 搜索和三个清空确认。原固定顺序回归在此后显式关闭学习，最终恢复开启，避免旧首选断言被合成学习污染。
+
+合成性能输出到 externalCacheDir/qa/frequency-performance-0.4.0.json，包含近似堆差、模型排序/补回/更新分位数、仓库固定查询和学习引擎查询，以及首次/单行事务耗时。近似堆值受 GC 和同时运行的应用影响，Debug API31 模拟器数据不能替代真机、端到端或电量测试。详细执行与失败修正均写入 [0.4.0 验证](../validation/VALIDATION-0.4.0.md)。
 
 ## 模拟器回归
 

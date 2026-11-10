@@ -42,11 +42,12 @@ flowchart TD
 1. `WubiRepository` 准备并打开五笔库。
 2. 解析 `traditional.tsv` 创建 `TraditionalConverter`。
 3. 准备 `PronunciationRepository`，创建 `WubiEngine`。
-4. 读取 `english.txt` 创建英文词表与引擎。
-5. 读取 `emoji.json` 创建 `EmojiRepository`。
-6. 切回主线程，未销毁时设 `ready=true` 并重绘。
+4. 额外尝试取得进程共享 WubiFrequencyStore，加载至多两万条个人词频并注入五笔引擎；此步骤失败单独回退固定排序，不阻止普通五笔输入。
+5. 读取 `english.txt` 创建英文词表与引擎。
+6. 读取 `emoji.json` 创建 `EmojiRepository`。
+7. 切回主线程，未销毁时设 `ready=true` 并重绘。
 
-整个资源加载共用一段 `try/catch`。任一步失败会设 `loadFailed=true`；`enqueue()` 提示离线数据加载失败并拒绝输入任务，没有自动重试或单资源降级。加载中显示准备提示，地球不可用。`LocalStore` 创建与初次剪贴板捕获在上述 `try/catch` 外，不能把它们也描述成受同一失败兜底保护。
+主要离线资源加载共用一段 `try/catch`；个人词频加载有独立异常回退。其他任一步失败会设 `loadFailed=true`；`enqueue()` 提示离线数据加载失败并拒绝输入任务，没有自动重试或单资源降级。加载中显示准备提示，地球不可用。`LocalStore` 创建与初次剪贴板捕获在上述 `try/catch` 外，不能把它们也描述成受同一失败兜底保护。
 
 `onCreateInputView()` 创建根 View。资源可能晚于 View 就绪，`render()` 会检查根节点与 `Ui` 是否初始化。
 
@@ -59,6 +60,8 @@ flowchart TD
 | `EnglishEngine` | worker 创建，之后主线程使用 | 英文预编辑状态与 composing 编辑同步，避免迟到光标回调打断新单词 |
 | `KoreanEngine` | 主线程 | 每次音节转换与宿主 composing 编辑同步 |
 | View、UI 状态快照、`InputConnection` 操作 | 主线程 | worker 通过 `publishInput()` 投递结果，不直接接触宿主编辑器 |
+| `WubiFrequency` | 共享同步模型；worker 查分/排序，主线程成功反馈，I/O 队列取快照 | 无 Android、SQL 或定时任务；只在短临界区访问内存 |
+| `WubiFrequencyStore` 日常保存/显式清空 | 独立低优先级串行 I/O 队列 | 不占输入 worker；只持 Application；事务不持模型锁 |
 | `LocalStore` | 多个调用位置；单实例方法 `@Synchronized` | 同一实例串行；Activity 和服务各自有实例，不是全局锁；emoji/剪贴板写入和部分设置读取仍在主线程 |
 | emoji 搜索过滤、字形检测、候选 View 测量和重建 | 主线程 | 当前实现；后续性能优化应先测量 |
 
@@ -74,6 +77,7 @@ flowchart TD
 | `onFinishInputView()` | 结束宿主 composing；失效会话；恢复主键盘并重绘 |
 | `onFinishInput()` | 失效会话；清除隐私/密码标志 |
 | 短按地球或菜单选择其他语言 | 先 `resolveThen()`，成功清码后失效会话，通过 `LanguagePreferences` 原子保存语言与非英语回切目标，再返回主键盘 |
+| `onWindowHidden()` | 通知共享组件后台保存有变化的五笔词频；无变化不写，保存请求合并，无定时任务 |
 | `onDestroy()` | 先标记销毁并使会话失效、停监听；调用父类后再排队关闭仓库和 store、关闭 worker、移除主线程回调 |
 
 销毁顺序有实际约束：父类 `onDestroy()` 会触发结束输入回调，worker 要在这些回调之后关闭，不能提前 `shutdown()` 再让回调向其投递任务。服务的剪贴板监听持续到销毁，键盘或剪贴板面板隐藏本身不停止监听。
@@ -91,5 +95,7 @@ flowchart TD
 | 小型 SQLite 保存个人数据 | `personal.db` 位于 `noBackupFilesDir`；新字段需要明确迁移与默认值策略 |
 | 三种语言不同执行线程 | 优先保持编辑正确性；统一调度前必须验证连续输入和光标时序 |
 | 会话令牌＋FIFO 输入队列 | 拒绝跨会话任务；同会话按键结果依序发布，没有独立查询序号，也不丢弃中间提交结果 |
+
+词频组件持有应用级 LocalStore 和模型，不随单个 IME 服务销毁关闭；不存在销毁兜底写盘，未保存词频允许随进程退出丢失。SQLite 增量迁移到 2，启用 WAL，但不将实例同步误认为跨连接业务锁。并发快照与清空的完整契约见 [词频维护说明](WUBI_FREQUENCY.md)。
 
 当前限制和后续验收方向见 [待改进事项](KNOWN_GAPS.md)，具体输入顺序见 [输入链路与引擎](INPUT_PIPELINE.md)。

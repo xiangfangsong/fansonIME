@@ -1,13 +1,21 @@
 package com.fanson.ime.engine
 
-data class Candidate(val text: String, val code: String, val exact: Boolean = true, val reading: String = "")
+data class Candidate(
+    val text: String, val code: String, val exact: Boolean = true, val reading: String = "",
+    val custom: Boolean = false, val sourceText: String = text
+)
 
 interface Lexicon {
     /** Exact entries first, then explicitly marked prefix completions. */
     fun lookup(code: String): List<Candidate>
+    fun lookupRemembered(code: String, remembered: List<Candidate>): List<Candidate> = lookup(code)
 }
 
-data class EngineResult(val commits: List<String> = emptyList(), val hint: String? = null, val composing: String? = null)
+data class WubiSelection(val commitIndex: Int, val inputCode: String, val candidate: Candidate)
+data class EngineResult(
+    val commits: List<String> = emptyList(), val hint: String? = null, val composing: String? = null,
+    val selections: List<WubiSelection> = emptyList()
+)
 
 interface InputEngine {
     val code: String
@@ -36,7 +44,9 @@ enum class WubiEnterAction(val value: String, val label: String, val noMatchHint
 class WubiEngine(
     private val lexicon: Lexicon,
     private val converter: TraditionalConverter? = null,
-    private val pronunciation: PronunciationLexicon? = null
+    private val pronunciation: PronunciationLexicon? = null,
+    private val frequency: WubiFrequency? = null,
+    private val clock: () -> Long = System::currentTimeMillis
 ) : InputEngine {
     override var code: String = ""
         private set
@@ -45,6 +55,8 @@ class WubiEngine(
     var autoCommitUnique = true
     var commitOnFifth = true
     var enterAction = WubiEnterAction.COMMIT_CODE
+    var frequencyEnabled = true
+        set(value) { if (field != value) { field = value; refresh() } }
     var traditionalMode = false
         set(value) { if (field != value) { field = value; refresh() } }
 
@@ -53,9 +65,14 @@ class WubiEngine(
 
     override fun reset() { code = ""; candidates = emptyList(); showingReadings = false }
     private fun refresh() {
-        val source = if (code.isEmpty() || 'z' in code) emptyList() else lexicon.lookup(code)
+        val now = clock()
+        val source = if (code.isEmpty() || 'z' in code) emptyList() else {
+            val remembered = if (frequencyEnabled) frequency?.recall(code, now).orEmpty() else emptyList()
+            if (remembered.isEmpty()) lexicon.lookup(code) else lexicon.lookupRemembered(code, remembered)
+        }
         val converted = if (traditionalMode) converter?.candidates(source) ?: source else source
-        candidates = if (showingReadings) converted.map { it.copy(reading = pronunciation?.reading(it.text) ?: "暂无读音") } else converted
+        val ranked = if (frequencyEnabled) frequency?.rank(code, converted, now) ?: converted else converted
+        candidates = if (showingReadings) ranked.map { it.copy(reading = pronunciation?.reading(it.text) ?: "暂无读音") } else ranked
     }
 
     override fun letter(char: Char): EngineResult {
@@ -71,8 +88,10 @@ class WubiEngine(
         }
         if (char !in 'a'..'y') return EngineResult()
         val commits = mutableListOf<String>()
+        val selections = mutableListOf<WubiSelection>()
         if (code.length == 4) {
             if (showingReadings || candidates.isEmpty() || !commitOnFifth) return EngineResult(hint = "请先选词或退格修正")
+            selections += WubiSelection(commits.size, code, candidates.first())
             commits += candidates.first().text
             reset()
         }
@@ -80,16 +99,18 @@ class WubiEngine(
         refresh()
         val exact = candidates.filter { it.exact }
         if (code.length == 4 && autoCommitUnique && !showingReadings && exact.size == 1) {
+            selections += WubiSelection(commits.size, code, exact.single())
             commits += exact.single().text
             reset()
         }
-        return EngineResult(commits, if (code.isNotEmpty() && candidates.isEmpty()) "无匹配，请退格修正" else null)
+        return EngineResult(commits, if (code.isNotEmpty() && candidates.isEmpty()) "无匹配，请退格修正" else null, selections = selections)
     }
 
     override fun select(index: Int): EngineResult {
         val selected = candidates.getOrNull(index) ?: return EngineResult()
+        val selection = WubiSelection(0, code, selected)
         reset()
-        return EngineResult(listOf(selected.text))
+        return EngineResult(listOf(selected.text), selections = listOf(selection))
     }
 
     override fun space(): EngineResult = when {

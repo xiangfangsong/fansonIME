@@ -12,6 +12,7 @@ import android.view.WindowInsets
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import com.fanson.ime.data.LocalStore
+import com.fanson.ime.data.WubiFrequencyStore
 import com.fanson.ime.engine.WubiEnterAction
 import com.fanson.ime.engine.InputLanguage
 import com.fanson.ime.R
@@ -63,7 +64,7 @@ class MainActivity : Activity() {
             isSaveEnabled = false
         }
         page.addView(sample, LinearLayout.LayoutParams(-1, dp(120)))
-        page.addView(ui.text("试打内容不保存。剪贴板查看和清空在键盘顶部的「剪贴板」面板中。", 13f, ui.palette.muted))
+        page.addView(ui.text("试打正文不保存；开启五笔词频时会学习候选使用习惯。剪贴板查看和清空在键盘顶部的「剪贴板」面板中。", 13f, ui.palette.muted))
         section("输入习惯")
         val languagePreferences = LanguagePreferences(store)
         val defaultLanguageRow = ui.row()
@@ -86,6 +87,8 @@ class MainActivity : Activity() {
         page.addView(ui.text("在符号页输入一个符号后返回主键盘；关闭后可连续输入符号。表情输入不受影响。", 13f, ui.palette.muted))
         toggle("四码唯一自动上屏", "auto_unique", true)
         toggle("第五码提交首选并开始新编码", "fifth_commit", true)
+        toggle("五笔按本地词频排序", "wubi_frequency", true)
+        page.addView(ui.text("仅五笔生效。按近期使用习惯调整同层候选，保留自定义短语和精确匹配优先；长期不用逐渐恢复固定顺序。关闭后停止学习并使用固定排序，已有学习保留。", 13f, ui.palette.muted))
         val enterRow = ui.row()
         enterRow.addView(ui.text("五笔回车键功能"), LinearLayout.LayoutParams(0, dp(48), 1f))
         val enterActions = WubiEnterAction.entries
@@ -130,19 +133,17 @@ class MainActivity : Activity() {
         })
         page.addView(heightText); page.addView(height)
         section("自己的常用短语")
-        page.addView(ui.text("手动添加编码和短语，不自动记录输入历史。自定义短语在相同编码下优先。", 13f, ui.palette.muted))
+        page.addView(ui.text("手动添加编码和短语，不自动从正文生成短语。自定义短语在相同编码下优先。", 13f, ui.palette.muted))
         val phraseButtons = ui.row()
         ui.addWeighted(phraseButtons, ui.button("添加短语") { addPhrase() })
         ui.addWeighted(phraseButtons, ui.button("管理短语") { managePhrases() })
         page.addView(phraseButtons)
         section("隐私与数据")
-        page.addView(ui.text("安装包无网络权限；无账号、广告、统计或云词库。不学习字词频率、不保存输入正文历史。仅在本机保存 emoji 使用次数与最近顺序，供单页常用排序；剪贴板记录最近 10 项普通文本。所有个人数据均排除系统备份。", 15f))
+        page.addView(ui.text("安装包无网络权限；无账号、广告、统计或云词库，不保存整段输入历史。五笔默认在本机学习候选使用习惯，最多保存两万条衰减词频，收起键盘后批量保存；密码、禁止个性化学习的输入框和表情搜索不学习。另保存 emoji 使用次数与最近顺序，以及最近 10 项普通文本剪贴板历史。所有个人数据均排除系统备份。", 15f))
         page.addView(ui.text("输入法作为系统默认输入法且服务运行时记录后续复制内容，标记为敏感的内容不存入历史。剪贴板「一键清空」同时清除系统当前内容和本输入法历史，其他应用的历史需分别管理。", 13f, ui.palette.muted))
-        val clear = ui.button("清空手动短语和 emoji 使用次数") {
-            AlertDialog.Builder(this).setTitle("清空本地个人数据？").setMessage("会删除全部手动短语与 emoji 使用次数，键盘设置和剪贴板历史保留。")
-                .setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> store.clearPersonalData(); toast("已清空短语和 emoji 次数") }.show()
-        }
-        page.addView(clear, LinearLayout.LayoutParams(-1, dp(48)))
+        clearButton("清空自定义短语", "删除全部手动短语及随之失效的学习记录；其他五笔词频、emoji 次数、设置和剪贴板保留。", "已清空自定义短语") { it.clearPhrases() }
+        clearButton("清空 emoji 使用次数", "重置 emoji 使用次数与最近顺序；自定义短语、五笔词频、设置和剪贴板保留。", "已清空 emoji 次数") { it.clearEmojiUsage() }
+        clearButton("清空五笔词频", "清除五笔学习记录，恢复初始候选顺序；自定义短语、emoji 次数、设置和剪贴板保留。开关保持原状态，开启时可重新学习。", "已清空五笔词频") { it.clearFrequency() }
         section("关于")
         val versionName = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
         page.addView(ui.text("放松输入法 · FansonIME $versionName · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0\n读音：pinyin-data / phrase-pinyin-data · MIT", 13f, ui.palette.muted))
@@ -151,10 +152,21 @@ class MainActivity : Activity() {
     }
 
     private fun section(label: String) { page.addView(ui.title(label, 19f).apply { setPadding(dp(8), dp(24), dp(8), dp(8)) }) }
+    private fun clearButton(label: String, explanation: String, success: String, action: (WubiFrequencyStore) -> Unit) {
+        page.addView(ui.button(label) {
+            AlertDialog.Builder(this).setTitle("$label？").setMessage(explanation)
+                .setNegativeButton("取消", null).setPositiveButton("清空") { _, _ -> dataAction(success, action) }.show()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+    }
+    private fun dataAction(success: String, action: (WubiFrequencyStore) -> Unit) {
+        WubiFrequencyStore.edit(this, action) { saved ->
+            runOnUiThread { if (!isFinishing && !isDestroyed) toast(if (saved) success else "操作未完成，请重试") }
+        }
+    }
     private fun toggle(label: String, key: String, default: Boolean) {
         val toggle = Switch(this).apply {
             text = label; textSize = 15f; setTextColor(ui.palette.ink); minHeight = dp(52)
-            isChecked = store.get(key, default.toString()).toBoolean()
+            isChecked = store.get(key, default.toString()).toBooleanStrictOrNull() ?: default
             setOnCheckedChangeListener { _, checked -> store.put(key, checked.toString()) }
         }
         page.addView(toggle)
@@ -180,7 +192,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this).setTitle("点击删除短语").setItems(phrases.map { "${it.code}  ${it.text}" }.toTypedArray()) { _, i ->
             val phrase = phrases[i]
             AlertDialog.Builder(this).setTitle("删除此短语？").setMessage(phrase.text).setNegativeButton("取消", null)
-                .setPositiveButton("删除") { _, _ -> store.removePhrase(phrase.code, phrase.text); toast("已删除") }.show()
+                .setPositiveButton("删除") { _, _ -> dataAction("已删除") { it.removePhrase(phrase.code, phrase.text) } }.show()
         }.setNegativeButton("关闭", null).show()
     }
     private fun showLicenses() {

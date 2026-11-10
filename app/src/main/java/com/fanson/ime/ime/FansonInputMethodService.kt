@@ -18,6 +18,8 @@ import com.fanson.ime.clipboard.ClipboardSnapshot
 import com.fanson.ime.data.LocalStore
 import com.fanson.ime.data.WubiRepository
 import com.fanson.ime.data.PronunciationRepository
+import com.fanson.ime.data.WubiFrequencyStore
+import com.fanson.ime.engine.FrequencyPermit
 import com.fanson.ime.emoji.Emoji
 import com.fanson.ime.emoji.EmojiRepository
 import com.fanson.ime.engine.Candidate
@@ -57,6 +59,7 @@ class FansonInputMethodService : InputMethodService() {
     private val koreanEngine = KoreanEngine() // main-thread confined
     private var repository: WubiRepository? = null
     private var pronunciation: PronunciationRepository? = null
+    private var frequency: WubiFrequencyStore? = null
     private var emoji: EmojiRepository? = null
     private lateinit var store: LocalStore
     private lateinit var languagePreferences: LanguagePreferences
@@ -87,6 +90,7 @@ class FansonInputMethodService : InputMethodService() {
     private var showRootHints = false
     private var showNumberRow = true
     private var symbolAutoReturn = true
+    private var wubiFrequencyEnabled = true
     private var rootCard: WubiRootCard? = null
     private var wubiEnterAction = WubiEnterAction.COMMIT_CODE
     private var panel = "keyboard"
@@ -124,7 +128,9 @@ class FansonInputMethodService : InputMethodService() {
                 repository = WubiRepository(this, store)
                 val converter = assets.open("traditional.tsv").bufferedReader().use { TraditionalConverter.read(it.lineSequence()) }
                 pronunciation = PronunciationRepository(this)
-                engine = WubiEngine(repository!!, converter, pronunciation)
+                // Learning failure must not prevent ordinary dictionary input.
+                frequency = try { WubiFrequencyStore.get(this) } catch (_: Exception) { null }
+                engine = WubiEngine(repository!!, converter, pronunciation, frequency?.model)
                 val words = assets.open("english.txt").bufferedReader().use { it.readLines() }
                 englishEngine = EnglishEngine(EnglishLexicon(words))
                 emoji = EmojiRepository(this)
@@ -166,6 +172,7 @@ class FansonInputMethodService : InputMethodService() {
         showRootHints = store.get("roots", "false").toBoolean()
         showNumberRow = store.get("number_row", "true").toBoolean()
         symbolAutoReturn = store.get("symbol_auto_return", "true").toBoolean()
+        wubiFrequencyEnabled = store.get("wubi_frequency", "true").toBooleanStrictOrNull() ?: true
         rootCard?.dismiss(); rootCard = null
         languagePopup?.dismiss(); languagePopup = null
         if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) keyHeight = minOf(keyHeight, 40)
@@ -202,6 +209,18 @@ class FansonInputMethodService : InputMethodService() {
         invalidateSession(); privateField = false; password = false
         super.onFinishInput()
     }
+    override fun onWindowHidden() {
+        super.onWindowHidden()
+        frequency?.saveOnHidden()
+    }
+
+    private fun learningPermit(mode: InputLanguage, search: Boolean) = FrequencyPermit(
+        mode == InputLanguage.WUBI && wubiFrequencyEnabled && !privateField && !search,
+        frequency?.model?.epoch ?: -1L
+    )
+    private fun acceptLearning(result: EngineResult, index: Int, accepted: Boolean, permit: FrequencyPermit) {
+        frequency?.model?.accept(result, index, accepted, permit, System.currentTimeMillis())
+    }
 
     /** SQL-backed Wubi runs on the worker. In-memory English mutates with its
      * composing edits on main, so cursor reports cannot split a queued word. */
@@ -231,8 +250,9 @@ class FansonInputMethodService : InputMethodService() {
         val mode = language
         val useTraditional = traditional && !search
         val useSpelling = spelling && !password
+        val permit = learningPermit(mode, search)
         inputTask(mode, token) { e ->
-            if (e is WubiEngine) e.traditionalMode = useTraditional
+            if (e is WubiEngine) { e.frequencyEnabled = permit.allowed; e.traditionalMode = useTraditional }
             if (e is EnglishEngine) e.enabled = useSpelling
             val result = operation(e)
             val code = e.code
@@ -243,10 +263,11 @@ class FansonInputMethodService : InputMethodService() {
                 // A syllable boundary commits its prefix and composes the next
                 // syllable together. Intermediate cursor callbacks must not reset it.
                 editorBatch {
-                    result.commits.forEach {
-                        if (search) emojiQuery += it
+                    result.commits.forEachIndexed { index, text ->
+                        if (search) emojiQuery += text
                         else {
-                            val accepted = commitText(it)
+                            val accepted = commitText(text)
+                            acceptLearning(result, index, accepted, permit)
                             committed = accepted && committed
                         }
                     }
@@ -305,7 +326,9 @@ class FansonInputMethodService : InputMethodService() {
         val token = session.get()
         val search = emojiSearching
         val mode = language
+        val permit = learningPermit(mode, search)
         inputTask(mode, token) { e ->
+            if (e is WubiEngine) e.frequencyEnabled = permit.allowed
             val removedCode = e.backspace()
             val code = e.code; val candidates = e.candidates.toList()
             val readings = (e as? WubiEngine)?.showingReadings == true
@@ -360,14 +383,18 @@ class FansonInputMethodService : InputMethodService() {
         val token = session.get()
         val search = emojiSearching
         val mode = language
+        val permit = learningPermit(mode, search)
         inputTask(mode, token) { e ->
+            if (e is WubiEngine) e.frequencyEnabled = permit.allowed
             val hadCode = e.code.isNotEmpty()
             val result = e.enter()
             val code = e.code
             val candidates = e.candidates.toList()
             val readings = (e as? WubiEngine)?.showingReadings == true
             publishInput(mode, token) {
-                result.commits.forEach { if (search) emojiQuery += it else commitText(it) }
+                result.commits.forEachIndexed { index, text ->
+                    if (search) emojiQuery += text else acceptLearning(result, index, commitText(text), permit)
+                }
                 currentCode = code; candidateSnapshot = candidates
                 showingReadings = readings
                 val wasExpanded = expanded
