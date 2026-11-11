@@ -1,6 +1,6 @@
 # 开发与验证
 
-基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.4.0 验证记录](../validation/VALIDATION-0.4.0.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。
+基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.4.1 验证记录](../validation/VALIDATION-0.4.1.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。
 
 ## 构建环境与命令
 
@@ -56,7 +56,7 @@ python tools\verify_assets.py
 
 ## 测试分层与源码入口
 
-当前有 8 个 JVM 测试文件、103 个 `@Test`；这是源码清点，执行状态以实际报告为准。
+当前有 10 个 JVM 测试文件、123 个 `@Test`；这是源码清点，执行状态以实际报告为准。
 
 | 层次/文件 | 验证内容 | 不能代替的验证 |
 | --- | --- | --- |
@@ -68,6 +68,8 @@ python tools\verify_assets.py
 | [`CandidateRowLayoutTest`](../../app/src/test/java/com/fanson/ime/keyboard/CandidateRowLayoutTest.kt) | 宽度、箭头、长首项、读音宽度规划 | 实际字体测量、触摸和横滑 |
 | [`SymbolCatalogTest`](../../app/src/test/java/com/fanson/ime/keyboard/SymbolCatalogTest.kt) | 分类顺序、符号覆盖、多字符完整性 | 实际面板布局 |
 | [`EmojiRankingTest`](../../app/src/test/java/com/fanson/ime/emoji/EmojiRankingTest.kt) | 次数/最近顺序、补位、支持字形过滤、30 项限制 | 实际字形和完整删除 |
+| [`WubiFrequencyTest`](../../app/src/test/java/com/fanson/ime/engine/WubiFrequencyTest.kt) | 衰减、分层、来源、容量、并发/失败快照、提交反馈 | 真机长期排序体验 |
+| [`HapticFeedbackTest`](../../app/src/test/java/com/fanson/ime/keyboard/HapticFeedbackTest.kt) | 0% 静音、偏好边界、两类硬件下所有百分比的合法与单调映射 | 实际硬件振感 |
 | [`verify_assets.py`](../../tools/verify_assets.py) | 源/产物哈希、SQLite 完整性和首选、读音样例、词表/字根/emoji、源 Manifest 权限及迁移排除 | 合并 Manifest、最终 APK、动态隐私行为 |
 | [`SmokeInstrumentation`](../../app/src/androidTest/java/com/fanson/ime/SmokeInstrumentation.kt) | Android 仓库和持久化、View 测量、软键盘操作、真实 composing、面板、剪贴板及截图 | 真机/不同宿主应用/性能分布 |
 
@@ -94,6 +96,10 @@ python tools\verify_assets.py
 SmokeInstrumentation 的 checkFrequencyUi 覆盖真实默认开关、后排提升、关闭固定回退、不学习、重新开启、真实收起保存、NO_PERSONALIZED_LEARNING、emoji 搜索和三个清空确认。原固定顺序回归在此后显式关闭学习，最终恢复开启，避免旧首选断言被合成学习污染。
 
 合成性能输出到 externalCacheDir/qa/frequency-performance-0.4.0.json，包含近似堆差、模型排序/补回/更新分位数、仓库固定查询和学习引擎查询，以及首次/单行事务耗时。近似堆值受 GC 和同时运行的应用影响，Debug API31 模拟器数据不能替代真机、端到端或电量测试。详细执行与失败修正均写入 [0.4.0 验证](../validation/VALIDATION-0.4.0.md)。
+
+## 0.4.1 触感与邮箱检查
+
+HapticFeedbackTest 遍历 1–100% 验证振幅/时长参数合法与单调，确保 0% 不向单次效果传非法振幅，覆盖缺失/非法/超界偏好。SmokeInstrumentation.checkHapticSettings 检查旧安装默认 50%、开关门控、真实 DOWN/MOVE/UP 拖动期间不写库/松手保存、无障碍 0/100% 调整、设置页面重建和新连接保持，以及关于邮箱精确文案可选择。新检查结束恢复震动关闭、强度 50%、主题跟随系统，不污染后续回归。模拟器无法证明实际马达强弱，真机需用户确认。
 
 ## 模拟器回归
 

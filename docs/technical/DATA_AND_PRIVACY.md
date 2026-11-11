@@ -93,7 +93,8 @@ PRAGMA user_version=1;
 | `wubi_frequency` | `true` | 仅五笔本地衰减排序，未知值回退开启；关闭恢复旧固定查询并停止学习，保留已有记录；隐私和搜索强制禁用 |
 | `auto_unique` | `true` | 四码唯一提交，读取后在 worker 更新 |
 | `fifth_commit` | `true` | 第五码提交，读取后在 worker 更新 |
-| `haptic` | `false` | 震动开关 |
+| `haptic` | `false` | 三语共用轻震动开关，关闭保留已选强度 |
+| `haptic_strength` | `50` | 0–100 的整数字符串；缺失/非法值回退 50，超界夹到范围；0 不振动；触摸松手保存，无障碍/方向键单步保存；下次键盘显示读取并缓存效果。只用现有 preferences 表，无 schema 迁移 |
 | `roots` | `false` | 字根简要提示与长按卡片共用开关 |
 | `number_row` | `true` | 三种语言共用数字行 |
 | `symbol_auto_return` | `true` | “输入符号后返回键盘”；仅符号网格输入后的自动返回，关闭后连续输入并保留分类；不影响 emoji 或符号页辅助按键 |

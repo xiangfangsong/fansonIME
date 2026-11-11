@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.os.Bundle
+import android.os.Vibrator
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
@@ -17,6 +18,7 @@ import com.fanson.ime.engine.WubiEnterAction
 import com.fanson.ime.engine.InputLanguage
 import com.fanson.ime.R
 import com.fanson.ime.keyboard.Palette
+import com.fanson.ime.keyboard.HapticFeedback
 import com.fanson.ime.keyboard.Ui
 import com.fanson.ime.keyboard.dp
 
@@ -105,7 +107,7 @@ class MainActivity : Activity() {
         }
         enterRow.addView(enterSpinner); page.addView(enterRow)
         page.addView(ui.text("仅五笔86输入编码时生效；无编码时仍按输入框要求换行或执行发送等操作。首个候选无匹配时保留编码。", 13f, ui.palette.muted))
-        toggle("按键轻震动", "haptic", false)
+        hapticControls()
         toggle("字母键显示字根提示", "roots", false)
         page.addView(ui.text("开启后，五笔字母键显示简要字根；长按可查看该键完整字根。", 13f, ui.palette.muted))
         section("键盘外观")
@@ -147,6 +149,7 @@ class MainActivity : Activity() {
         section("关于")
         val versionName = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
         page.addView(ui.text("放松输入法 · FansonIME $versionName · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0\n读音：pinyin-data / phrase-pinyin-data · MIT", 13f, ui.palette.muted))
+        page.addView(ui.text("作者邮箱：cnxfs@foxmail.com", 15f).apply { setTextIsSelectable(true) })
         page.addView(ui.button("第三方数据与许可") { showLicenses() }, LinearLayout.LayoutParams(-1, dp(48)))
         refreshStatus()
     }
@@ -163,13 +166,52 @@ class MainActivity : Activity() {
             runOnUiThread { if (!isFinishing && !isDestroyed) toast(if (saved) success else "操作未完成，请重试") }
         }
     }
-    private fun toggle(label: String, key: String, default: Boolean) {
+    private fun toggle(label: String, key: String, default: Boolean): Switch {
         val toggle = Switch(this).apply {
             text = label; textSize = 15f; setTextColor(ui.palette.ink); minHeight = dp(52)
             isChecked = store.get(key, default.toString()).toBooleanStrictOrNull() ?: default
             setOnCheckedChangeListener { _, checked -> store.put(key, checked.toString()) }
         }
         page.addView(toggle)
+        return toggle
+    }
+    private fun hapticControls() {
+        val enabled = toggle("按键轻震动", "haptic", false)
+        val label = ui.text("")
+        val slider = SeekBar(this).apply {
+            contentDescription = "振动强度"
+            min = 0; max = 100
+            progress = HapticFeedback.strength(store.get("haptic_strength", HapticFeedback.DEFAULT_STRENGTH.toString()))
+            isEnabled = enabled.isChecked
+        }
+        fun updateLabel(level: Int) {
+            label.text = getString(if (level == 0) R.string.haptic_strength_muted else R.string.haptic_strength_value, level)
+            slider.stateDescription = getString(R.string.haptic_strength_percent, level)
+        }
+        fun saveAndPreview(level: Int) {
+            store.put("haptic_strength", level.toString())
+            if (enabled.isChecked) HapticFeedback.preview(getSystemService(Vibrator::class.java), level)
+        }
+        updateLabel(slider.progress)
+        var dragging = false
+        slider.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onStartTrackingTouch(seekBar: SeekBar) { dragging = true }
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                dragging = false
+                saveAndPreview(seekBar.progress)
+            }
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                updateLabel(progress)
+                // Accessibility/D-pad adjustments have no touch stop callback.
+                if (fromUser && !dragging) saveAndPreview(progress)
+            }
+        })
+        enabled.setOnCheckedChangeListener { _, checked ->
+            store.put("haptic", checked.toString())
+            slider.isEnabled = checked
+        }
+        page.addView(label); page.addView(slider)
+        page.addView(ui.text("开启轻震动后可调整；松手体验效果，0% 不振动。不同手机的振感可能不同。", 13f, ui.palette.muted))
     }
     private fun addPhrase() {
         val content = ui.column().apply { setPadding(dp(20), dp(8), dp(20), dp(8)) }

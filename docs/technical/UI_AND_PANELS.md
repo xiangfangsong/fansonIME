@@ -94,7 +94,7 @@ val showCandidates = inputPanel && currentCode.isNotEmpty() && !password &&
 
 退格长按在 420ms 后启动，之后每 85ms 重复。触摸观察器返回 `false`，保留 Button 正常点击和无障碍 `performClick()` 通道；松手、取消、重绘、会话失效均取消重复任务。不要让触摸观察器吞掉所有点击。
 
-震动开启时使用 10ms 单次效果，并限制至少间隔 30ms；这是触感逻辑，不参与输入节流。
+0.4.1 轻震动由 `HapticFeedback` 统一映射，默认强度 50%、范围 0–100%。有振幅控制时固定 10ms，振幅按百分比映射到 1–255；无振幅控制时默认振幅配 1–20ms 短脉冲，50% 为 10ms。0% 或无振动硬件不构造效果。服务在 readSettings 中缓存 VibrationEffect，按键只播放缓存，保留至少 30ms 间隔；这是触感限制，不参与输入节流。
 
 ## 弹层与界面约束
 
@@ -113,3 +113,11 @@ val showCandidates = inputPanel && currentCode.isNotEmpty() && !password &&
 隐私与数据说明明确学习只在本机、最多两万条、隐藏后批保存，无整段输入历史。原联合清空拆为三个按钮，独立说明和确认；完成提示来自后台实际结果，失败提示重试。清词频保持开关；清短语仅清随之失效的学习，清 emoji 不动五笔。设置和剪贴板保留。短语管理单条删除也走同一后台流程。
 
 日常词频保存依据 IME 窗口真实隐藏，不依据退出某面板、打开某个设置控件或仅结束输入框；没有轮询/定时任务。此前输入的候选如果在打开设置前被 resolve 并由宿主接受，按正常正文提交计分，内部 emoji 搜索不计分。详细身份和清空边界见 [词频维护说明](WUBI_FREQUENCY.md)。
+
+## 0.4.1 轻震动强度与关于页
+
+“按键轻震动”保持默认关闭，其后为“振动强度”SeekBar 和百分比标签。开关关闭禁用滑动条但保留值，开启后可拖动；范围 0–100%，默认 50%，0% 标签明确为不振动。拖动只改内存显示，松手才写入 `haptic_strength` 并预览一次；无障碍 ACTION_SET_PROGRESS/方向键没有触摸结束回调，因此每次用户单步调整保存并预览，程序初始化/重建不触发保存或振动。没有周期任务、拖动逐帧数据库写入或逐帧预览。
+
+预览与键盘共用 [HapticFeedback.kt](../../app/src/main/java/com/fanson/ime/keyboard/HapticFeedback.kt)。服务在原 onStartInput/onStartInputView 读取开关和强度，缓存硬件能力对应的效果；不修改三语输入链路。旧安装缺少强度时使用 50%，保留原开关；旧版系统 DEFAULT_AMPLITUDE 与新的 50% 不保证感受相同。不同硬件可能无法呈现每一级差异，手机实际触感和系统限制仍需用户验收。
+
+关于页增加可选择复制的 `作者邮箱：cnxfs@foxmail.com`，不配置发送动作，不新增网络权限或外部邮件调用。API 依据：[振幅能力](https://developer.android.com/reference/android/os/Vibrator#hasAmplitudeControl())、[单次效果参数](https://developer.android.com/reference/android/os/VibrationEffect#createOneShot(long,int))；仅参考平台契约，未引入第三方代码或依赖。

@@ -3,4 +3,7 @@
     <string name="app_name">放松输入法</string>
     <string name="ime_name">放松输入法</string>
     <string name="key_height_value">按键高度：%1$d dp</string>
+    <string name="haptic_strength_value">振动强度：%1$d%%</string>
+    <string name="haptic_strength_muted">振动强度：%1$d%%（不振动）</string>
+    <string name="haptic_strength_percent">%1$d%%</string>
 </resources>

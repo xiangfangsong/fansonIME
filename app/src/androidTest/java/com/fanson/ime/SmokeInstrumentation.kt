@@ -48,6 +48,8 @@ class SmokeInstrumentation : Instrumentation() {
             store.put("wubi_enter_action", "commit_code")
             store.put("number_row", "true")
             store.put("roots", "false")
+            store.put("haptic", "false")
+            store.put("theme", "system")
             passed += WubiFrequencyChecks.run(this)
             // Simulate an upgraded installation with no preference for this new setting.
             android.database.sqlite.SQLiteDatabase.openDatabase(
@@ -56,6 +58,7 @@ class SmokeInstrumentation : Instrumentation() {
             ).use {
                 it.delete("preferences", "key=?", arrayOf("symbol_auto_return"))
                 it.delete("preferences", "key=?", arrayOf("wubi_frequency"))
+                it.delete("preferences", "key=?", arrayOf("haptic_strength"))
             }
             check(store.get("symbol_auto_return", "missing") == "missing")
             WubiRepository(targetContext, store).use { repository ->
@@ -158,6 +161,7 @@ class SmokeInstrumentation : Instrumentation() {
                 })
             }
             passed += "application_about_version_matches_installed_package"
+            checkHapticSettings(activity)
             runOnMainSync {
                 val ui = Ui(targetContext, Palette.of(targetContext, "light"))
                 var selected: Candidate? = null
@@ -1310,6 +1314,91 @@ class SmokeInstrumentation : Instrumentation() {
         }
     }
     private fun allViews(view: View): List<View> = listOf(view) + if (view is ViewGroup) (0 until view.childCount).flatMap { allViews(view.getChildAt(it)) } else emptyList()
+    private fun checkHapticSettings(activity: Activity) {
+        LocalStore(targetContext).use { store ->
+            fun slider() = allViews(activity.window.decorView).filterIsInstance<android.widget.SeekBar>().first { it.contentDescription == "振动强度" }
+            fun toggle() = allViews(activity.window.decorView).filterIsInstance<android.widget.Switch>().first { it.text.toString() == "按键轻震动" }
+            runOnMainSync {
+                check(!toggle().isChecked && !slider().isEnabled)
+                check(slider().min == 0 && slider().max == 100 && slider().progress == 50)
+                val email = allViews(activity.window.decorView).filterIsInstance<TextView>().single { it.text.toString() == "作者邮箱：cnxfs@foxmail.com" }
+                check(email.isTextSelectable)
+            }
+            passed += "haptic_strength_upgrade_default_and_switch_gate_ui"
+            passed += "author_email_exact_and_selectable_in_about_ui"
+            runOnMainSync {
+                toggle().isChecked = true
+                val args = Bundle().apply { putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 70f) }
+                check(slider().performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, args))
+                check(slider().progress == 70 && slider().stateDescription == "70%")
+                slider().requestRectangleOnScreen(android.graphics.Rect(0, 0, slider().width, slider().height), true)
+            }
+            check(store.get("haptic_strength", "missing") == "70")
+            var xStart = 0f; var xEnd = 0f; var y = 0f
+            var previous: List<Int>? = null; var stableSince = 0L
+            await {
+                var stable = false
+                runOnMainSync {
+                    val bar = slider()
+                    val position = IntArray(2).also { bar.getLocationOnScreen(it) }.toList() + listOf(bar.width, bar.height)
+                    if (position != previous) { previous = position; stableSince = SystemClock.uptimeMillis() }
+                    val rect = android.graphics.Rect()
+                    stable = bar.isLaidOut && bar.getGlobalVisibleRect(rect) && rect.height() == bar.height && SystemClock.uptimeMillis() - stableSince >= 150
+                    if (stable) {
+                        val track = bar.width - bar.paddingLeft - bar.paddingRight
+                        xStart = position[0] + bar.paddingLeft + track * .7f
+                        xEnd = position[0] + bar.paddingLeft + track * .25f
+                        y = position[1] + bar.height / 2f
+                    }
+                }
+                stable
+            }
+            val down = SystemClock.uptimeMillis()
+            sendPointerSync(android.view.MotionEvent.obtain(down, down, android.view.MotionEvent.ACTION_DOWN, xStart, y, 0))
+            sendPointerSync(android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_MOVE, xEnd, y, 0))
+            var moved = 0
+            await {
+                runOnMainSync { moved = slider().progress }
+                moved in 20..30
+            }
+            check(store.get("haptic_strength", "") == "70") // dragging must not write repeatedly
+            sendPointerSync(android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_UP, xEnd, y, 0))
+            await { store.get("haptic_strength", "") == moved.toString() }
+            screenshot("47-haptic-strength-slider-0.4.1")
+            runOnMainSync {
+                for (level in listOf(0f, 100f)) {
+                    val args = Bundle().apply { putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, level) }
+                    check(slider().performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, args))
+                    check(store.get("haptic_strength", "") == level.toInt().toString())
+                }
+                toggle().isChecked = false
+                check(!slider().isEnabled && slider().progress == 100)
+            }
+            passed += "haptic_real_slider_drag_defers_save_to_release_and_accessibility_endpoints_ui"
+            fun theme(index: Int) {
+                var previousSlider: android.widget.SeekBar? = null
+                runOnMainSync {
+                    previousSlider = slider()
+                    allViews(activity.window.decorView).filterIsInstance<android.widget.Spinner>().first { it.getItemAtPosition(0).toString() == "跟随系统" }.setSelection(index)
+                }
+                await {
+                    var rebuilt = false
+                    runOnMainSync { rebuilt = slider() !== previousSlider && store.get("theme", "") == if (index == 1) "light" else "system" }
+                    rebuilt
+                }
+            }
+            theme(1)
+            runOnMainSync { check(slider().progress == 100 && !slider().isEnabled && !toggle().isChecked) }
+            LocalStore(targetContext).use { check(it.get("haptic_strength", "") == "100" && it.get("haptic", "") == "false") }
+            store.put("haptic_strength", "50")
+            theme(0)
+            runOnMainSync {
+                check(slider().progress == 50 && !slider().isEnabled)
+                allViews(activity.window.decorView).filterIsInstance<android.widget.ScrollView>().first().scrollTo(0, 0)
+            }
+            passed += "haptic_strength_and_off_state_survive_settings_rebuild_and_reopen_ui"
+        }
+    }
     private fun checkFrequencyUi(activity: Activity, editor: EditText, refresh: () -> Unit) {
         val store = LocalStore(targetContext)
         val frequency = com.fanson.ime.data.WubiFrequencyStore.get(targetContext)

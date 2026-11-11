@@ -10,8 +10,8 @@ android {
         applicationId = "com.fanson.ime"
         minSdk = 31
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.4.0"
+        versionCode = 20
+        versionName = "0.4.1"
         testInstrumentationRunner = "com.fanson.ime.SmokeInstrumentation"
     }
     buildTypes {

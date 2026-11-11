@@ -33,6 +33,7 @@ import com.fanson.ime.engine.TraditionalConverter
 import com.fanson.ime.engine.InputLanguage
 import com.fanson.ime.engine.KoreanEngine
 import com.fanson.ime.keyboard.Palette
+import com.fanson.ime.keyboard.HapticFeedback
 import com.fanson.ime.keyboard.CandidateStrip
 import com.fanson.ime.keyboard.candidateButton
 import com.fanson.ime.keyboard.EmojiCategoryStrip
@@ -87,6 +88,8 @@ class FansonInputMethodService : InputMethodService() {
     private var password = false
     private var keyHeight = 48
     private var haptics = false
+    private val deviceVibrator by lazy { getSystemService(Vibrator::class.java) }
+    private var hapticEffect: VibrationEffect? = null
     private var showRootHints = false
     private var showNumberRow = true
     private var symbolAutoReturn = true
@@ -169,6 +172,8 @@ class FansonInputMethodService : InputMethodService() {
     private fun readSettings() {
         keyHeight = (store.get("key_height", "48").toIntOrNull() ?: 48).coerceIn(40, 64)
         haptics = store.get("haptic", "false").toBoolean()
+        val hapticStrength = HapticFeedback.strength(store.get("haptic_strength", HapticFeedback.DEFAULT_STRENGTH.toString()))
+        hapticEffect = if (haptics) HapticFeedback.effect(deviceVibrator, hapticStrength) else null
         showRootHints = store.get("roots", "false").toBoolean()
         showNumberRow = store.get("number_row", "true").toBoolean()
         symbolAutoReturn = store.get("symbol_auto_return", "true").toBoolean()
@@ -909,9 +914,10 @@ class FansonInputMethodService : InputMethodService() {
         }
     }
     private fun vibrate() {
-        if (!haptics || SystemClock.uptimeMillis() - lastVibration < 30) return
+        val effect = hapticEffect ?: return
+        if (SystemClock.uptimeMillis() - lastVibration < 30) return
         lastVibration = SystemClock.uptimeMillis()
-        getSystemService(Vibrator::class.java)?.vibrate(VibrationEffect.createOneShot(10, VibrationEffect.DEFAULT_AMPLITUDE))
+        deviceVibrator?.vibrate(effect)
     }
     private fun hint(text: String) {
         if (candidateRow?.visibility == View.VISIBLE && candidateRow?.showHint(text) == true) return
