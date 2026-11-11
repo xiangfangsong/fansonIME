@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.os.VibrationEffect
+import android.text.InputType
 import android.os.Vibrator
 import android.view.*
 import android.view.inputmethod.EditorInfo
@@ -27,12 +28,14 @@ import com.fanson.ime.engine.EngineResult
 import com.fanson.ime.engine.WubiEngine
 import com.fanson.ime.engine.WubiEnterAction
 import com.fanson.ime.engine.InputEngine
+import com.fanson.ime.engine.EnglishCapitalization
 import com.fanson.ime.engine.EnglishEngine
 import com.fanson.ime.engine.EnglishLexicon
 import com.fanson.ime.engine.TraditionalConverter
 import com.fanson.ime.engine.InputLanguage
 import com.fanson.ime.engine.KoreanEngine
 import com.fanson.ime.keyboard.Palette
+import com.fanson.ime.keyboard.KeyboardShortcuts
 import com.fanson.ime.keyboard.HapticFeedback
 import com.fanson.ime.keyboard.CandidateStrip
 import com.fanson.ime.keyboard.candidateButton
@@ -81,7 +84,9 @@ class FansonInputMethodService : InputMethodService() {
     private var koreanShift = false
     private var languagePopup: LanguagePopup? = null
     private var globe: Button? = null
-    private var uppercase = false
+    private val englishCase = EnglishCapitalization()
+    private val englishPosition = EnglishEditorPosition()
+    private var englishAutoCapitalize = true
     private var traditional = false
     private var spelling = true
     private var privateField = false
@@ -159,13 +164,16 @@ class FansonInputMethodService : InputMethodService() {
         val preferred = languagePreferences.preferredLanguage
         language = EditorPolicy.initialLanguage(attribute.inputType, preferred)
         panel = if (EditorPolicy.numeric(attribute.inputType)) "numbers" else "keyboard"
-        uppercase = false; koreanShift = false
+        englishCase.reset(); koreanShift = false
+        englishPosition.reset(attribute.initialSelStart, attribute.initialSelEnd)
         readSettings()
     }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         readSettings()
+        if (english && currentCode.isEmpty()) resetEnglishPosition()
+        refreshEnglishCase()
         render()
     }
 
@@ -176,6 +184,7 @@ class FansonInputMethodService : InputMethodService() {
         hapticEffect = if (haptics) HapticFeedback.effect(deviceVibrator, hapticStrength) else null
         showRootHints = store.get("roots", "false").toBoolean()
         showNumberRow = store.get("number_row", "true").toBoolean()
+        englishAutoCapitalize = store.get("english_auto_capitalize", "true").toBooleanStrictOrNull() ?: true
         symbolAutoReturn = store.get("symbol_auto_return", "true").toBoolean()
         wubiFrequencyEnabled = store.get("wubi_frequency", "true").toBooleanStrictOrNull() ?: true
         rootCard?.dismiss(); rootCard = null
@@ -200,12 +209,13 @@ class FansonInputMethodService : InputMethodService() {
         emojiQuery = ""; emojiSearching = false; emojiPage = 0
         emojiCategoryStrip = null; emojiCategoryScrollX = 0
         englishEngine?.reset()
+        englishCase.reset()
         koreanEngine.reset(); koreanShift = false
         if (!destroyed && !worker.isShutdown) worker.execute { engine?.reset() }
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
-        currentInputConnection?.finishComposingText()
+        finishComposing()
         invalidateSession(); panel = "keyboard"
         render()
         super.onFinishInputView(finishingInput)
@@ -276,9 +286,13 @@ class FansonInputMethodService : InputMethodService() {
                             committed = accepted && committed
                         }
                     }
-                    result.composing?.let { currentInputConnection?.setComposingText(it, 1) }
+                    result.composing?.let { setComposing(it) }
                     currentCode = code; candidateSnapshot = candidates; expanded = false
                     showingReadings = readings
+                }
+                if (mode == InputLanguage.ENGLISH && code.isEmpty() && useSpelling && result.commits.isNotEmpty()) {
+                    englishCase.boundary()
+                    refreshEnglishCase()
                 }
                 renderCandidates()
                 result.hint?.let { hint(it) }
@@ -289,7 +303,34 @@ class FansonInputMethodService : InputMethodService() {
         }
     }
 
-    private fun resolveThen(action: () -> Unit) { enqueue({ it.resolve() }, action) }
+    private fun resolveThen(action: () -> Unit) { enqueue({ it.resolve() }, {
+        if (english) { englishCase.boundary(); refreshEnglishCase() }
+        action()
+    }) }
+    private fun resetEnglishPosition() {
+        val cursor = currentInputConnection?.getSurroundingText(0, 0, 0)
+        if (cursor != null && cursor.offset >= 0) englishPosition.reset(cursor.offset + cursor.selectionStart, cursor.offset + cursor.selectionEnd)
+        else englishPosition.reset(-1, -1)
+    }
+    private fun refreshEnglishCase() {
+        if (!english) return
+        val previous = englishCase.shift
+        val allowed = englishAutoCapitalize && !emojiSearching &&
+            currentInputEditorInfo?.let { EditorPolicy.englishAutoCapitalize(it.inputType) } == true
+        val atStart = allowed && currentCode.isEmpty() &&
+            EditorPolicy.sentenceStart(currentInputConnection?.getCursorCapsMode(InputType.TYPE_TEXT_FLAG_CAP_SENTENCES) ?: 0)
+        englishCase.refresh(atStart)
+        if (previous != englishCase.shift) renderBody()
+    }
+    private fun finishComposing() {
+        if (currentInputConnection?.finishComposingText() == true && english) englishPosition.finishComposing()
+    }
+    private fun setComposing(text: String) {
+        if (currentInputConnection?.setComposingText(text, 1) == true && english && !emojiSearching) englishPosition.compose(text.length)
+    }
+    private fun englishBoundary() {
+        if (english) { englishCase.boundary(); refreshEnglishCase() }
+    }
     private fun editorBatch(action: () -> Unit) {
         val connection = currentInputConnection
         connection?.beginBatchEdit()
@@ -298,21 +339,33 @@ class FansonInputMethodService : InputMethodService() {
     private fun commitText(text: String): Boolean {
         val connection = currentInputConnection ?: return false
         connection.beginBatchEdit()
-        return try { connection.commitText(text, 1) } finally { connection.endBatchEdit() }
+        return try {
+            connection.commitText(text, 1).also { accepted ->
+                if (accepted && english && !emojiSearching) englishPosition.commit(text.length)
+            }
+        } finally { connection.endBatchEdit() }
     }
     private fun letter(char: Char) {
         rootCard?.dismiss()
         languagePopup?.dismiss()
         vibrate()
         val resetShift = korean && koreanShift
-        val typed = if ((english && uppercase) || resetShift) char.uppercaseChar() else char
+        val oldShift = englishCase.shift
+        val typed = when { english && ready -> englishCase.letter(char); resetShift -> char.uppercaseChar(); else -> char }
         enqueue({ it.letter(typed) })
         if (resetShift) { koreanShift = false; renderBody() }
+        else if (english && oldShift != englishCase.shift) renderBody()
     }
     private fun punct(text: String) { punct(text, null) }
     private fun punct(text: String, onCommitted: (() -> Unit)?) {
         rootCard?.dismiss(); languagePopup?.dismiss(); vibrate()
         enqueue({ it.punctuation(text) }, onCommitted = onCommitted)
+        if (english && currentCode.isEmpty() && (!spelling || password)) englishBoundary()
+    }
+    private fun keyboardPunctuation(text: String) {
+        if (chinese && text == KeyboardShortcuts.QUOTE_PAIR) punct(text) {
+            PairedQuoteCursor.moveInside(currentInputConnection)
+        } else punct(text)
     }
     private fun insertSymbol(text: String) {
         punct(text) {
@@ -322,7 +375,7 @@ class FansonInputMethodService : InputMethodService() {
             }
         }
     }
-    private fun space() { rootCard?.dismiss(); languagePopup?.dismiss(); vibrate(); enqueue({ it.space() }) }
+    private fun space() { rootCard?.dismiss(); languagePopup?.dismiss(); vibrate(); enqueue({ it.space() }); if (english && (!spelling || password)) englishBoundary() }
     private fun deleteKey() {
         rootCard?.dismiss()
         languagePopup?.dismiss()
@@ -344,11 +397,12 @@ class FansonInputMethodService : InputMethodService() {
                         else deleteEditorCluster()
                     }
                     else if (mode != InputLanguage.WUBI) {
-                        currentInputConnection?.setComposingText(code, 1)
-                        if (code.isEmpty()) currentInputConnection?.finishComposingText()
+                        setComposing(code)
+                        if (code.isEmpty()) finishComposing()
                     }
                     currentCode = code; candidateSnapshot = candidates; showingReadings = readings
                 }
+                if (mode == InputLanguage.ENGLISH) refreshEnglishCase()
                 expanded = false; renderCandidates()
             }
         }
@@ -365,7 +419,7 @@ class FansonInputMethodService : InputMethodService() {
 
     private fun deleteEditorCluster() {
         val ic = currentInputConnection ?: return
-        if (!ic.getSelectedText(0).isNullOrEmpty()) { ic.commitText("", 1); return }
+        if (!ic.getSelectedText(0).isNullOrEmpty()) { commitText(""); return }
         val before = ic.getTextBeforeCursor(512, 0)?.toString().orEmpty()
         if (before.isEmpty()) {
             ic.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
@@ -377,7 +431,7 @@ class FansonInputMethodService : InputMethodService() {
         val tableMatch = emoji?.all?.asSequence()?.map { it.text }?.filter { before.endsWith(it) }?.maxByOrNull { it.length }
         val removedByIcu = before.length - dropLastCluster(before).length
         val count = maxOf(removedByIcu, tableMatch?.length ?: 0)
-        ic.deleteSurroundingText(count, 0)
+        if (ic.deleteSurroundingText(count, 0) && english) englishPosition.deleteBefore(count)
     }
 
     private fun enter() {
@@ -414,23 +468,37 @@ class FansonInputMethodService : InputMethodService() {
                     if (!noAction && action !in setOf(EditorInfo.IME_ACTION_NONE, EditorInfo.IME_ACTION_UNSPECIFIED)) currentInputConnection?.performEditorAction(action)
                     else commitText("\n")
                 }
+                if (mode == InputLanguage.ENGLISH) englishBoundary()
             }
         }
     }
 
     override fun onUpdateSelection(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        if (!chinese && currentCode.isNotEmpty() && (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
-            // Editor callbacks may arrive after newer edits have composed another
-            // word. Ignore an old report. Request zero surrounding characters.
+        if (english) {
+            if (englishPosition.matches(newSelStart, newSelEnd) &&
+                (currentCode.isEmpty() || (newSelStart == candidatesEnd && newSelEnd == candidatesEnd))) return
+            // Own edits can have older callbacks queued behind newer words.
+            val cursor = currentInputConnection?.getSurroundingText(0, 0, 0)
+            if (cursor != null && cursor.offset >= 0 &&
+                (cursor.offset + cursor.selectionStart != newSelStart || cursor.offset + cursor.selectionEnd != newSelEnd)) return
+            finishComposing()
+            if (currentCode.isNotEmpty()) {
+                session.incrementAndGet()
+                currentCode = ""; candidateSnapshot = emptyList(); expanded = false
+                englishEngine?.reset()
+            }
+            englishPosition.reset(newSelStart, newSelEnd)
+            englishCase.positionChanged()
+            refreshEnglishCase()
+            if (!destroyed) { renderCandidates(); renderBody() }
+        } else if (korean && currentCode.isNotEmpty() && (newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) {
             val cursor = currentInputConnection?.getSurroundingText(0, 0, 0)
             if (cursor != null && cursor.offset >= 0 && (cursor.offset + cursor.selectionStart != newSelStart ||
                     cursor.offset + cursor.selectionEnd != newSelEnd)) return
-            // Cursor/selection changes finish the current word; never replace text elsewhere.
-            currentInputConnection?.finishComposingText()
+            finishComposing()
             session.incrementAndGet()
             currentCode = ""; candidateSnapshot = emptyList(); expanded = false
-            englishEngine?.reset()
             koreanEngine.reset()
             if (!destroyed) { renderCandidates(); renderBody() }
         }
@@ -543,7 +611,9 @@ class FansonInputMethodService : InputMethodService() {
         resolveThen {
             invalidateSession()
             languagePreferences.recordSelection(language, next)
-            language = next; uppercase = false
+            language = next; englishCase.reset()
+            if (english) resetEnglishPosition()
+            refreshEnglishCase()
             leaveClipboard(); panel = "keyboard"; render()
         }
     }
@@ -555,11 +625,12 @@ class FansonInputMethodService : InputMethodService() {
         } else if (chinese) {
             enqueue({ if (it is WubiEngine) it.enter(WubiEnterAction.COMMIT_CODE) else it.enter() }, after = {
                 languagePreferences.recordSelection(language, InputLanguage.ENGLISH)
-                language = InputLanguage.ENGLISH; uppercase = true
+                language = InputLanguage.ENGLISH; englishCase.reset(locked = true)
+                resetEnglishPosition()
                 render()
             })
         } else {
-            uppercase = !uppercase
+            englishCase.toggle()
             render()
         }
     }
@@ -588,7 +659,7 @@ class FansonInputMethodService : InputMethodService() {
         if (showNumberRow) {
             val numberRow = ui.row().apply { contentDescription = "数字行" }
             "1234567890".forEach { digit ->
-                ui.addWeighted(numberRow, ui.button(digit.toString()) { punct(digit.toString()) }.apply { textSize = 18f }, height = keyHeight)
+                ui.addWeighted(numberRow, ui.cornerHintButton(digit.toString(), KeyboardShortcuts.number(digit, chinese)!!, ::punct).apply { textSize = 18f }, height = keyHeight)
             }
             container.addView(numberRow)
         }
@@ -596,15 +667,29 @@ class FansonInputMethodService : InputMethodService() {
             val row = ui.row()
             if (index == 1) row.setPadding(dp(14), 0, dp(14), 0)
             if (index == 2) ui.addWeighted(row, ui.iconButton(
-                if ((uppercase && english) || (korean && koreanShift)) R.drawable.ic_caps else R.drawable.ic_shift,
+                when {
+                    english && englishCase.shift == EnglishCapitalization.Shift.AUTO -> R.drawable.ic_shift_auto
+                    (english && englishCase.shift == EnglishCapitalization.Shift.CAPS) || (korean && koreanShift) -> R.drawable.ic_caps
+                    else -> R.drawable.ic_shift
+                },
                 if (korean) "韩语上档" else "切换大小写", accent = korean && koreanShift, action = { shift() }
-            ).apply { isSelected = korean && koreanShift }, 1.25f, keyHeight)
+            ).apply {
+                isSelected = korean && koreanShift
+                if (english) stateDescription = when (englishCase.shift) {
+                    EnglishCapitalization.Shift.AUTO -> "句首自动大写，点按取消本次大写"
+                    EnglishCapitalization.Shift.CAPS -> "持续大写，点按切换小写"
+                    EnglishCapitalization.Shift.LOWER -> "小写，点按开启持续大写"
+                }
+            }, 1.25f, keyHeight)
             chars.forEach { char ->
                 val label = if (korean) KoreanEngine.keyLabel(if (koreanShift) char.uppercaseChar() else char).toString()
-                    else if (chinese || uppercase) char.uppercase() else char.toString()
+                    else if (chinese || (english && englishCase.uppercase)) char.uppercase() else char.toString()
                 val key = if (chinese && char == 'z') ui.iconButton(R.drawable.ic_pronunciation_lookup, "Z / 查读音", showingReadings) {
                     letter('z')
                 }.also { pronunciationKey = it }
+                else if (english && char == 'l') ui.cornerHintButton(label, "'") { value ->
+                    if (value == "'") punct(value) else letter(char)
+                }
                 else ui.button(label + if (showRoots && rootHints[char] != null) "\n${rootHints[char]}" else "") { letter(char) }
                 key.textSize = if (showRoots) 14f else 20f
                 key.tag = char.toString()
@@ -614,7 +699,7 @@ class FansonInputMethodService : InputMethodService() {
                     (rootCard ?: WubiRootCard(ui).also { rootCard = it }).show(key, char)
                     true
                 }
-                else key.isLongClickable = false
+                else if (!(english && char == 'l')) key.isLongClickable = false
                 ui.addWeighted(row, key, height = keyHeight)
             }
             if (index == 2) ui.addWeighted(row, deleteButton(), 1.25f, keyHeight)
@@ -625,8 +710,9 @@ class FansonInputMethodService : InputMethodService() {
         val languageKey = if (korean) ui.button("한/漢") {}.apply {
             isEnabled = false; alpha = .55f
             contentDescription = "한/漢（暂未开放）"
-        } else if (chinese) ui.button(if (traditional && !emojiSearching) "繁" else "简") {
-            if (emojiSearching) hint("表情搜索使用简体关键词")
+        } else if (chinese) ui.cornerHintButton(if (traditional && !emojiSearching) "繁" else "简", KeyboardShortcuts.QUOTE_PAIR) { text ->
+            if (text == KeyboardShortcuts.QUOTE_PAIR) keyboardPunctuation(text)
+            else if (emojiSearching) hint("表情搜索使用简体关键词")
             else {
                 traditional = !traditional
                 enqueue({ EngineResult() })
@@ -641,11 +727,11 @@ class FansonInputMethodService : InputMethodService() {
             else resolveThen { spelling = !spelling; renderBody(); renderCandidates() }
         }.apply { isSelected = spelling && !password; isEnabled = !password }
         ui.addWeighted(bottom, languageKey, 1.2f, keyHeight)
-        ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "，" else ",", if (chinese) "！" else "!", ::punct), .8f, keyHeight)
+        ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "，" else ",", KeyboardShortcuts.comma(chinese, showNumberRow), ::keyboardPunctuation), .8f, keyHeight)
         val space = spaceButton(showLanguage = true)
         space.setOnLongClickListener { showCursorControls(); true }
         ui.addWeighted(bottom, space, 3.3f, keyHeight)
-        ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "。" else ".", if (chinese) "？" else "?", ::punct), .8f, keyHeight)
+        ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "。" else ".", KeyboardShortcuts.period(chinese, showNumberRow), ::keyboardPunctuation), .8f, keyHeight)
         ui.addWeighted(bottom, enterButton(), 1.4f, keyHeight)
         container.addView(bottom)
         updatePronunciationKey()

@@ -38,7 +38,11 @@ import java.io.File
 /** Run only on a disposable emulator. No existing user clip is read or retained. */
 class SmokeInstrumentation : Instrumentation() {
     private val passed = mutableListOf<String>()
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
+    private var shortcutsOnly = false
+    override fun onCreate(arguments: Bundle?) {
+        shortcutsOnly = arguments?.getString("focus") == "keyboard_shortcuts"
+        super.onCreate(arguments); start()
+    }
     override fun onStart() {
         try {
             val store = LocalStore(targetContext)
@@ -59,6 +63,7 @@ class SmokeInstrumentation : Instrumentation() {
                 it.delete("preferences", "key=?", arrayOf("symbol_auto_return"))
                 it.delete("preferences", "key=?", arrayOf("wubi_frequency"))
                 it.delete("preferences", "key=?", arrayOf("haptic_strength"))
+                it.delete("preferences", "key=?", arrayOf("english_auto_capitalize"))
             }
             check(store.get("symbol_auto_return", "missing") == "missing")
             WubiRepository(targetContext, store).use { repository ->
@@ -319,7 +324,16 @@ class SmokeInstrumentation : Instrumentation() {
                     if (shown) check((0 until rows.single().childCount).map { (rows.single().getChildAt(it) as Button).text.toString() } == "1234567890".map { it.toString() })
                 }
             }
+            if (shortcutsOnly) {
+                setToggle("英语句首自动大写", false)
+                checkKeyboardShortcuts(activity, editor, ::refreshKeyboard)
+                LocalStore(targetContext).use { it.put("english_auto_capitalize", "true"); it.put("number_row", "true") }
+                finish(Activity.RESULT_OK, Bundle().apply { putString("passed", passed.joinToString(",")); putInt("count", passed.size) })
+                return
+            }
             checkFrequencyUi(activity, editor, ::refreshKeyboard)
+            checkEnglishInput(activity, editor, ::refreshKeyboard)
+            checkKeyboardShortcuts(activity, editor, ::refreshKeyboard)
             longPress("切换语言")
             runOnMainSync {
                 val menu = windows().filterIsInstance<android.widget.LinearLayout>().first { visible(it) && it.contentDescription == "输入语言列表" }
@@ -820,6 +834,7 @@ class SmokeInstrumentation : Instrumentation() {
                 await { findButton("␣ ${language.label}") != null }
             }
             passed += "space_language_label_only_on_keyboard_symbol_space_in_all_languages"
+            setToggle("显示顶部数字行", false) // Existing !/? regressions explicitly exercise the hidden-row mode.
             InputLanguage.entries.forEach { language ->
                 chooseLanguage(language)
                 val comma = if (language == InputLanguage.WUBI) "，" else ","
@@ -1300,6 +1315,7 @@ class SmokeInstrumentation : Instrumentation() {
             LocalStore(targetContext).use { it.clearClipboardHistory() }
             LocalStore(targetContext).use { it.put("wubi_frequency", "true") }
             runOnMainSync { activity.finish() }
+            LocalStore(targetContext).use { it.put("english_auto_capitalize", "true"); it.put("number_row", "true") }
             finish(Activity.RESULT_OK, Bundle().apply { putString("passed", passed.joinToString(",")); putInt("count", passed.size) })
         } catch (error: Throwable) {
             runCatching { screenshot("failure") }
@@ -1314,6 +1330,286 @@ class SmokeInstrumentation : Instrumentation() {
         }
     }
     private fun allViews(view: View): List<View> = listOf(view) + if (view is ViewGroup) (0 until view.childCount).flatMap { allViews(view.getChildAt(it)) } else emptyList()
+    private fun checkKeyboardShortcuts(activity: Activity, editor: EditText, refresh: () -> Unit) {
+        LocalStore(targetContext).use { store ->
+            // Catch the reported half-L regression at the minimum key height,
+            // enlarged font scales and both palettes, against an ordinary key.
+            runOnMainSync {
+                for (theme in listOf("light", "dark")) for (scale in listOf(1f, 1.3f)) {
+                    val config = android.content.res.Configuration(targetContext.resources.configuration).apply { fontScale = scale }
+                    val context = targetContext.createConfigurationContext(config)
+                    val ui = Ui(context, Palette.of(context, theme))
+                    for (label in listOf("l", "L", "简", "繁")) {
+                        val alternate = if (label in listOf("简", "繁")) "“”" else "'"
+                        val size = if (label in listOf("简", "繁")) 16f else 20f
+                        val normal = ui.button(label) {}.apply { textSize = size }
+                        val hinted = ui.cornerHintButton(label, alternate) {}.apply { textSize = size }
+                        for (key in listOf(normal, hinted)) {
+                            key.measure(View.MeasureSpec.makeMeasureSpec(context.dp(36), View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(context.dp(40), View.MeasureSpec.EXACTLY))
+                            key.layout(0, 0, key.measuredWidth, key.measuredHeight)
+                        }
+                        check(hinted.text.toString() == label && hinted.layout.lineCount == 1 && hinted.layout.getEllipsisCount(0) == 0)
+                        check(hinted.baseline == normal.baseline && hinted.layout.height == normal.layout.height)
+                        check(hinted.compoundPaddingTop + hinted.layout.height + hinted.compoundPaddingBottom <= hinted.height)
+                        check((hinted as com.fanson.ime.keyboard.CornerHintButton).cornerHint == alternate)
+                    }
+                }
+            }
+            passed += "corner_hint_keeps_full_l_and_L_single_line_baseline_at_40dp_large_fonts_both_themes"
+            fun row(enabled: Boolean) {
+                runOnMainSync {
+                    allViews(activity.window.decorView).filterIsInstance<android.widget.Switch>().first { it.text.toString() == "显示顶部数字行" }.isChecked = enabled
+                    editor.setText("")
+                }
+                refresh()
+                check(store.get("number_row", "true").toBoolean() == enabled)
+            }
+            fun clear() {
+                runOnMainSync { editor.setText(""); editor.setSelection(0) }
+                // Establish the post-clear editor session before a queued Wubi burst.
+                refresh()
+            }
+            fun cursor(position: Int): Boolean {
+                var correct = false
+                runOnMainSync { correct = editor.selectionStart == position && editor.selectionEnd == position }
+                return correct
+            }
+            row(true)
+            for (language in InputLanguage.entries) {
+                chooseLanguage(language); clear()
+                runOnMainSync {
+                    val row = windows().filterIsInstance<android.widget.LinearLayout>().first { visible(it) && it.contentDescription == "数字行" }
+                    check((0 until row.childCount).map { (row.getChildAt(it) as Button).text.toString() }.joinToString("") == "1234567890")
+                    "1234567890".zip(if (language == InputLanguage.WUBI) "！@#$%^&*（）" else "!@#$%^&*()").forEach { (digit, symbol) ->
+                        val key = findButtonOnMain(digit.toString())
+                        check(key is com.fanson.ime.keyboard.CornerHintButton && key.cornerHint == symbol.toString())
+                        check(key.stateDescription == "长按输入$symbol")
+                        key.performClick()
+                    }
+                }
+                await { editor.text.toString() == "1234567890" }
+                clear()
+                runOnMainSync { "1234567890".forEach { check(findButtonOnMain(it.toString()).performLongClick()) } }
+                await { editor.text.toString() == if (language == InputLanguage.WUBI) "！@#$%^&*（）" else "!@#$%^&*()" }
+            }
+            passed += "all_languages_number_row_pc_mapping_short_digits_and_long_symbols_ui"
+            for (language in InputLanguage.entries) {
+                chooseLanguage(language); clear()
+                val prefix = if (language == InputLanguage.WUBI) "！" else "!"
+                longPress("1"); await { editor.text.toString() == prefix }
+                longPress("9"); await { editor.text.toString() == prefix + if (language == InputLanguage.WUBI) "（" else "(" }
+                longPress("0"); await { editor.text.toString() == prefix + if (language == InputLanguage.WUBI) "（）" else "()" }
+            }
+            passed += "all_languages_real_number_long_press_release_does_not_append_digit_ui"
+            for ((language, keys, result) in listOf(
+                Triple(InputLanguage.WUBI, "a", "工@"), Triple(InputLanguage.ENGLISH, "app", "app@"), Triple(InputLanguage.KOREAN, "rk", "가@")
+            )) {
+                chooseLanguage(language); clear()
+                runOnMainSync { keys.forEach { findKeyboardButton(it).performClick() } }
+                await { when (language) {
+                    InputLanguage.WUBI -> findText("编码：a") != null
+                    InputLanguage.ENGLISH -> findText("英文：app") != null
+                    InputLanguage.KOREAN -> editor.text.toString() == "가"
+                } }
+                longPress("2"); await { editor.text.toString() == result }
+            }
+            passed += "number_long_press_resolves_wubi_candidate_english_word_and_korean_composition_ui"
+            for (enabled in listOf(true, false)) {
+                row(enabled)
+                for (language in InputLanguage.entries) {
+                    chooseLanguage(language); clear()
+                    val chinese = language == InputLanguage.WUBI
+                    val comma = if (chinese) "，" else ","
+                    val period = if (chinese) "。" else "."
+                    val colon = if (enabled) { if (chinese) "：" else ":" } else { if (chinese) "！" else "!" }
+                    val quote = if (chinese) "？" else if (enabled) "\"" else "?"
+                    check(findButton(comma)!!.stateDescription == "长按输入$colon")
+                    check(findButton(period)!!.stateDescription == "长按输入$quote")
+                    click(comma); click(period); await { editor.text.toString() == comma + period }
+                    longPress(comma); longPress(period)
+                    await { editor.text.toString() == comma + period + colon + quote }
+                    check(cursor((comma + period + colon + quote).length))
+                }
+            }
+            passed += "number_row_toggle_changes_comma_period_long_press_in_all_languages_and_keeps_short_taps_ui"
+            for (enabled in listOf(true, false)) {
+                row(enabled); chooseLanguage(InputLanguage.WUBI); clear()
+                for (label in listOf("简", "繁")) {
+                    runOnMainSync {
+                        val key = findButtonOnMain(label)
+                        check(key is com.fanson.ime.keyboard.CornerHintButton && key.cornerHint == "“”")
+                        check(key.text.toString() == label && key.layout.lineCount == 1 && key.stateDescription == "长按输入“”")
+                    }
+                    longPress(label)
+                    await { editor.text.toString() == "“”" && cursor(1) && findButton(label) != null }
+                    // A short tap still changes the conversion mode and leaves text/cursor alone.
+                    click(label)
+                    await { findButton(if (label == "简") "繁" else "简") != null && editor.text.toString() == "“”" && cursor(1) }
+                    clear()
+                }
+            }
+            passed += "simplified_traditional_corner_quotes_keep_label_and_short_toggle_in_both_number_row_modes_ui"
+            row(true); chooseLanguage(InputLanguage.WUBI)
+            for ((before, start, end) in listOf(Triple("", 0, 0), Triple("甲乙", 1, 1), Triple("前选后", 1, 2), Triple("😀后", 2, 2))) {
+                runOnMainSync { editor.setText(before); editor.setSelection(start, end) }; waitForIdleSync()
+                longPress("简")
+                val expected = before.take(start) + "“”" + before.drop(end)
+                await { editor.text.toString() == expected && cursor(start + 1) }
+                runOnMainSync { findKeyboardButton('a').performClick() }; await { findText("编码：a") != null }
+                click("空格")
+                await { editor.text.toString() == before.take(start) + "“工”" + before.drop(end) && cursor(start + 2) }
+            }
+            clear(); runOnMainSync { findKeyboardButton('a').performClick() }; await { findText("编码：a") != null }
+            longPress("简"); await { editor.text.toString() == "工“”" && cursor(2) }
+            screenshot("53-chinese-toggle-quote-hint-0.4.2")
+            clear(); click("Z / 查读音"); await { findText("编码：z") != null }
+            longPress("简"); longPress("1")
+            check(editor.text.isEmpty() && cursor(0) && findText("编码：z") != null)
+            click("退格"); await { findText("编码：z") == null }
+            passed += "chinese_paired_quotes_cursor_in_empty_middle_selection_surrogate_and_candidate_no_match_ui"
+            runOnMainSync { editor.setText("保留"); editor.setSelection(1) }
+            click("表情"); click("五笔搜索 emoji"); await { findButton("关键词：输入中文") != null }
+            longPress("，"); longPress("。"); longPress("简"); longPress("1")
+            await { findButton("关键词：：？“”！") != null }
+            check(editor.text.toString() == "保留" && cursor(1))
+            click("‹ 键盘"); await { findButton("简") != null }
+            passed += "number_row_symbols_and_paired_quotes_keep_emoji_search_isolated_from_host_cursor_ui"
+            chooseLanguage(InputLanguage.ENGLISH); clear()
+            store.put("key_height", "40"); refresh()
+            click("切换大小写")
+            await {
+                var correct = false
+                runOnMainSync { val key = findKeyboardButton('l'); correct = key.text.toString() == "L" && key.layout?.lineCount == 1 }
+                correct
+            }
+            screenshot("51-corner-l-number-hints-0.4.2")
+            store.put("key_height", "48"); store.put("input_language", "wubi86")
+            clear(); refresh(); await { findButton("简") != null }
+        }
+    }
+    private fun checkEnglishInput(activity: Activity, editor: EditText, refresh: () -> Unit) {
+        val originalType = editor.inputType
+        LocalStore(targetContext).use { store ->
+            fun toggle() = allViews(activity.window.decorView).filterIsInstance<android.widget.Switch>().first { it.text.toString() == "英语句首自动大写" }
+            fun state(): String {
+                var value = ""
+                runOnMainSync { value = windows().filterIsInstance<Button>().firstOrNull { visible(it) && it.contentDescription == "切换大小写" }?.stateDescription?.toString().orEmpty() }
+                return value
+            }
+            fun auto() = state().startsWith("句首自动大写")
+            fun lower() = state().startsWith("小写")
+            fun caps() = state().startsWith("持续大写")
+            fun prose(text: String) {
+                store.put("input_language", "english")
+                runOnMainSync { editor.setText(text); editor.setSelection(editor.length()) }
+                refresh()
+                await { findButton("␣ English") != null }
+            }
+            fun type(text: String) {
+                runOnMainSync {
+                    text.forEach { char ->
+                        when (char) {
+                            ' ' -> findButtonOnMain("空格").performClick()
+                            '.', ',', '!', '?' -> findButtonOnMain(if (char == '!' || char == '?') { if (char == '!') "," else "." } else char.toString()).let {
+                                if (char == '!' || char == '?') it.performLongClick() else it.performClick()
+                            }
+                            else -> findKeyboardButton(char).performClick()
+                        }
+                    }
+                }
+            }
+            fun candidates(): List<String> {
+                var items = emptyList<String>()
+                runOnMainSync {
+                    val strip = windows().filterIsInstance<CandidateStrip>().first { visible(it) }
+                    items = allViews(strip).filterIsInstance<Button>().filter { it.text.isNotEmpty() && it.contentDescription != "展开候选" }.map { it.text.toString() }
+                }
+                return items
+            }
+            runOnMainSync { check(toggle().isChecked) }
+            check(store.get("english_auto_capitalize", "true") == "true")
+            prose(""); await { auto() }
+            screenshot("49-english-auto-capitalize-0.4.2")
+            type("hello world"); await { editor.text.toString() == "Hello world" && lower() }
+            type(". "); await { auto() }
+            type("next"); await { editor.text.toString() == "Hello world. Next" && lower() }
+            passed += "english_auto_case_upgrade_default_one_letter_and_fast_sentence_typing_ui"
+
+            prose(""); await { auto() }; click("切换大小写"); await { lower() }
+            type("a"); click("退格"); await { editor.text.isEmpty() && lower() }
+            type("hello"); await { editor.text.toString() == "hello" && lower() }
+            type(". "); await { auto() }
+            click("切换大小写"); click("切换大小写"); await { caps() }
+            type("abc abc"); await { editor.text.toString() == "hello. ABC ABC" && caps() }
+            click("切换大小写"); await { lower() }
+            passed += "english_auto_case_cancel_survives_delete_and_manual_caps_remains_persistent_ui"
+
+            for (text in listOf("Hello! ", "Hello? ", "Hello. \"", "Hello.) ", "hello\n")) {
+                prose(text); await { auto() }
+            }
+            for (text in listOf("hello ", "hello, ", "3.14 ")) { prose(text); await { lower() } }
+            passed += "english_sentence_caps_punctuation_quotes_newline_and_decimal_boundaries_ui"
+            prose("hello. world"); await { lower() }
+            runOnMainSync { editor.setSelection(7) }; await { auto() }
+            type("hi"); await { editor.text.toString() == "hello. Hiworld" }
+            runOnMainSync { editor.setSelection(0) }; await { auto() && findText("英文：Hi") == null }
+            type("x"); await { editor.text.toString() == "Xhello. Hiworld" }
+            prose("replace me")
+            runOnMainSync { editor.setSelection(0, 7) }; await { auto() }
+            type("hi"); await { editor.text.toString() == "Hi me" }
+            passed += "english_cursor_navigation_and_selection_replace_recalculate_case_without_overwriting_old_composition_ui"
+
+            prose(""); await { auto() }
+            click("自动拼写已开启"); await { findButton("自动拼写已关闭") != null && auto() }
+            type("hello world. next"); await { editor.text.toString() == "Hello world. Next" }
+            checkCandidateArea(false)
+            click("自动拼写已关闭"); await { findButton("自动拼写已开启") != null }
+            passed += "english_auto_case_works_with_spelling_disabled_and_direct_fast_typing_ui"
+
+            runOnMainSync { toggle().isChecked = false }; prose(""); await { lower() }
+            type("im"); await { editor.text.toString() == "im" }
+            check(candidates().take(2) == listOf("I'm", "im"))
+            screenshot("50-english-contraction-first-0.4.2")
+            click("I'm"); await { editor.text.toString() == "I'm" }
+            LocalStore(targetContext).use { check(it.get("english_auto_capitalize", "") == "false") }
+            passed += "english_auto_case_setting_persists_off_and_contraction_still_pinned_ui"
+            for ((input, output) in mapOf("its" to "it's", "id" to "I'd", "youre" to "you're", "dont" to "don't")) {
+                prose("prefix "); type(input)
+                await { candidates().take(2) == listOf(output, input) }
+                click(output); await { editor.text.toString() == "prefix $output" }
+            }
+            prose("prefix "); type("its "); await { editor.text.toString() == "prefix its " }
+            prose("prefix "); type("its"); click("its"); await { editor.text.toString() == "prefix its" }
+            passed += "english_contractions_click_replace_and_original_second_or_space_remain_literal_ui"
+            prose("prefix "); type("you"); longPress("l")
+            await { editor.text.toString() == "prefix you'" && findText("英文：you'") != null }
+            type("re"); await { editor.text.toString() == "prefix you're" && candidates().first() == "you're" }
+            click("退格"); click("退格"); click("退格"); await { editor.text.toString() == "prefix you" }
+            type("re"); await { candidates().take(2) == listOf("you're", "youre") }
+            passed += "english_real_long_press_apostrophe_keeps_one_composing_word_and_delete_restores_shortcut_ui"
+
+            runOnMainSync { toggle().isChecked = true }
+            prose(""); await { auto() }; type("its"); await { candidates().take(2) == listOf("It's", "Its") }
+            click("It's"); await { editor.text.toString() == "It's" }
+            prose(""); await { auto() }; click("切换大小写"); click("切换大小写"); type("youre")
+            await { candidates().take(2) == listOf("YOU'RE", "YOURE") }
+            passed += "english_contractions_follow_automatic_title_case_and_manual_caps_ui"
+            for (variation in listOf(android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD,
+                android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, android.text.InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
+                android.text.InputType.TYPE_TEXT_VARIATION_URI)) {
+                runOnMainSync { editor.inputType = android.text.InputType.TYPE_CLASS_TEXT or variation }
+                prose(""); await { lower() }
+                type("a"); await { editor.text.toString() == "a" }
+                click("切换大小写"); type("b"); await { editor.text.toString() == "aB" }
+            }
+            passed += "english_sensitive_email_and_url_fields_skip_auto_caps_but_allow_manual_caps_ui"
+            // Preserve the existing regression suite's explicit lowercase expectations.
+            runOnMainSync { editor.inputType = originalType; toggle().isChecked = false; editor.setText("") }
+            store.put("input_language", "wubi86"); refresh()
+            await { findButton("␣ 五笔86") != null }
+        }
+    }
     private fun checkHapticSettings(activity: Activity) {
         LocalStore(targetContext).use { store ->
             fun slider() = allViews(activity.window.decorView).filterIsInstance<android.widget.SeekBar>().first { it.contentDescription == "振动强度" }
@@ -1331,7 +1627,8 @@ class SmokeInstrumentation : Instrumentation() {
                 val args = Bundle().apply { putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 70f) }
                 check(slider().performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id, args))
                 check(slider().progress == 70 && slider().stateDescription == "70%")
-                slider().requestRectangleOnScreen(android.graphics.Rect(0, 0, slider().width, slider().height), true)
+                // Leave room below the track so injected touches cannot hit the system navigation area.
+                slider().requestRectangleOnScreen(android.graphics.Rect(0, 0, slider().width, slider().height + targetContext.dp(180)), true)
             }
             check(store.get("haptic_strength", "missing") == "70")
             var xStart = 0f; var xEnd = 0f; var y = 0f
@@ -1355,14 +1652,23 @@ class SmokeInstrumentation : Instrumentation() {
             }
             val down = SystemClock.uptimeMillis()
             sendPointerSync(android.view.MotionEvent.obtain(down, down, android.view.MotionEvent.ACTION_DOWN, xStart, y, 0))
-            sendPointerSync(android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_MOVE, xEnd, y, 0))
             var moved = 0
-            await {
-                runOnMainSync { moved = slider().progress }
-                moved in 20..30
+            try {
+                // A real drag has intermediate frames, rather than DOWN and a
+                // teleported MOVE sharing an event timestamp.
+                for (step in 1..6) {
+                    SystemClock.sleep(24)
+                    val x = xStart + (xEnd - xStart) * step / 6f
+                    sendPointerSync(android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_MOVE, x, y, 0))
+                }
+                await {
+                    runOnMainSync { moved = slider().progress }
+                    moved in 20..30
+                }
+                check(store.get("haptic_strength", "") == "70") // dragging must not write repeatedly
+            } finally {
+                sendPointerSync(android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_UP, xEnd, y, 0))
             }
-            check(store.get("haptic_strength", "") == "70") // dragging must not write repeatedly
-            sendPointerSync(android.view.MotionEvent.obtain(down, SystemClock.uptimeMillis(), android.view.MotionEvent.ACTION_UP, xEnd, y, 0))
             await { store.get("haptic_strength", "") == moved.toString() }
             screenshot("47-haptic-strength-slider-0.4.1")
             runOnMainSync {

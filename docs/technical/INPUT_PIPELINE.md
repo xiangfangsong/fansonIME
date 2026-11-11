@@ -41,7 +41,7 @@ sequenceDiagram
 
 `resolveThen(action)` 等价于 `enqueue({ it.resolve() }, action)`。服务用“操作后的 `code` 是否为空”判断是否继续打开面板、切语言、打开设置或光标控制；不是只看是否产生提交结果。
 
-0.3.3 另为 `enqueue()` 增加可选 `onCommitted` 通知：非搜索、存在 commits、全部 `commitText()` 返回 true 且 code 为空时调用。目前仅符号网格选择使用，控制设置允许的自动返回键盘。原 after 的条件保持；提交循环仍逐项执行，不使用会短路后续提交的 `all()`。这只增加完成通知，不补足提交失败后的引擎回滚/重放。
+0.3.3 另为 `enqueue()` 增加可选 `onCommitted` 通知：非搜索、存在 commits、全部 `commitText()` 返回 true 且 code 为空时调用。0.3.3 用于符号网格自动返回，0.4.2 同版本修订另外用于中文成对引号提交后的光标定位。原 after 的条件保持；提交循环仍逐项执行，不使用会短路后续提交的 `all()`。这只增加完成通知，不补足提交失败后的引擎回滚/重放。
 
 0.3.2 的地球短按和长按菜单选择其他语言均复用 `chooseLanguage()`，只在 resolve 成功后的回调中保存当前语言和非英语回切目标；无匹配五笔不会更改这些偏好。`LanguagePreferences` 只计算目标及管理设置，不处理引擎或宿主编辑。五笔 Shift 保留原“提交编码再进入英文大写”的行为，同时记录五笔回切目标。
 
@@ -90,12 +90,14 @@ sequenceDiagram
 
 [`EnglishLexicon`](../../app/src/main/java/com/fanson/ime/engine/EnglishEngine.kt) 保存词频排名与字典序词表。按小写前缀二分确定 `[prefix, prefix + '{')` 范围，完整同名词优先，其他按原词频顺序，最多 80 项；输出大小写跟随全大写或首字母大写形式。匹配区间仍会在内存排序，并非预先存好每个前缀的前 80 项。
 
-`EnglishEngine.enabled=true` 时仅接收 ASCII 字母，更新 `code` 并返回 `composing=code`。超过 64 字母前会先确认前一段，再开始新的预编辑段。关闭补全时逐字返回提交结果，不保留单词状态；服务在关闭开关前先 resolve，密码框强制关闭。
+`EnglishEngine.enabled=true` 时接收 ASCII 字母和词内首个 ASCII 撇号，更新 `code` 并返回 `composing=code`。超过 64 字母前会先确认前一段，再开始新的预编辑段。关闭补全时逐字返回提交结果，不保留单词状态；服务在关闭开关前先 resolve，密码框强制关闭。
 
 - 点击候选提交选中词，`commitText()` 替换当前宿主 composing 区域。
 - 空格提交原词再提交空格；标点先提交原词再提交标点，不自动用首候选纠正拼写。
 - 回车有词时先确认原词，本次不发送/换行；空码回车走宿主动作。
 - 退格优先修改预编辑词；删至空时服务设置空 composing 并结束 composing。
+
+0.4.2 新增独立句首大写状态、宿主位置预测和常用缩写候选。缺撇号仅完整命中时按“缩写、原词、原补全”排序，去重后最多 80；原词提交规则保持。英语 L 长按撇号可继续同一个预编辑词。关闭补全不关闭句首大写。三状态、位置回调核对、字段与性能边界见 [英语维护说明](ENGLISH_INPUT.md)。
 
 ## 韩语两式组字
 
@@ -116,7 +118,7 @@ ekfr → 닭；ekfrk → 已提交 달 + composing 가
 
 ## 光标、回车与删除
 
-`onUpdateSelection()` 仅对非五笔且 `currentCode` 非空的预编辑执行位置检查。当新选区不位于 composing 末尾时，用 `getSurroundingText(0,0,0)` 核对当前真实光标；能确认回调过期则忽略。真实光标/选区变化时结束 composing、递增会话、清空英文和韩语引擎及候选，后续输入不替换旧位置。
+0.4.2 的 `onUpdateSelection()` 对英语使用预测位置和零字符实时位置核对，真实光标/选区变化时清当前词并重算句首大写；自身及过期编辑回调不会重置取消状态。韩语仍仅在 `currentCode` 非空时执行预编辑位置检查。当新选区不位于 composing 末尾时，用 `getSurroundingText(0,0,0)` 核对当前真实光标；能确认回调过期则忽略。真实光标/选区变化时结束 composing、递增会话、清空英文和韩语引擎及候选，后续输入不替换旧位置。
 
 这个零长度查询用于取得位置，不读取正文。退格是另一条链路，会读取光标前最多 512 个 UTF-16 单元；不要把两者混成“从不读取周边文字”。五笔目前没有同样的光标变更清码分支。
 
@@ -130,3 +132,5 @@ ekfr → 닭；ekfrk → 已提交 달 + composing 가
 4. 取两者较大的 UTF-16 长度，调用 `deleteSurroundingText(count,0)`。
 
 内部搜索字符串退格使用 ICU 字符簇边界。已提交韩文按完整字符删除；编码/音节退格则先由引擎消费。新增 emoji、扩展区汉字或删除优化时，必须保留代理对、肤色、旗帜、变体选择符和 ZWJ 的完整性验证。
+
+0.4.2 同版本长按修订仍走原 punct/enqueue：顶部数字行 PC 符号与冒号/双引号映射由 KeyboardShortcuts 决定。仅中文成对引号成功正文提交后，经 onCommitted 调用 PairedQuoteCursor；最多读光标前 1 个字符核对右引号与绝对下标后 setSelection。无匹配、失败、搜索和过期会话不移动宿主光标。详见 [长按维护](KEYBOARD_SHORTCUTS.md)。

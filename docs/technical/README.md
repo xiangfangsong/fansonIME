@@ -1,6 +1,7 @@
 # 技术文档入口
 
-这组文档记录 FansonIME 当前代码实现。当前开发版本为 **0.4.1 / versionCode 20**，2026-11-10 增加轻震动强度滑动条和作者邮箱；本次 123 项 JVM、128 项模拟器检查、资源及零问题 Lint 通过，用户于 2026-11-11 确认真机验收通过并授权提交，未授权推送。0.4.0 / `00bb608` 已获用户确认词频生效，长期体验继续观察。当前验证见 [0.4.1 记录](../validation/VALIDATION-0.4.1.md)，振动规则见 [界面与面板](UI_AND_PANELS.md)，偏好见 [数据与隐私](DATA_AND_PRIVACY.md)；词频完整说明见 [维护说明](WUBI_FREQUENCY.md)，命名边界见 [命名约定](NAMING.md)。
+
+这组文档记录 FansonIME 当前代码实现。当前开发版本为 **0.4.2 / versionCode 21**，2026-11-11 新增英语句首大写和缩写候选，并修订 L 右上角提示、三语数字行/标点长按及中文成对引号，长按规则见 [维护说明](KEYBOARD_SHORTCUTS.md)，实施与维护见 [英语输入说明](ENGLISH_INPUT.md)，实际验证见 [0.4.2 记录](../validation/VALIDATION-0.4.2.md)。本版 144 项 JVM、43 项专项模拟器检查、资源及零问题 Lint 通过；已覆盖安装真机，用户于 2026-11-11 确认最终验收通过并授权提交，未授权推送。0.4.1 / `8b51b32` 已获用户真机验收；0.4.0 词频长期体验继续观察。词频完整说明见 [维护说明](WUBI_FREQUENCY.md)，命名边界见 [命名约定](NAMING.md)。
 
 后续开发遵循仓库根目录的 [AGENTS.md](../../AGENTS.md)。技术文档已按基线源码核对，但不承诺无遗漏；开始修改前必须核对相关源码和测试，发现偏差时同步修正文档。
 
@@ -25,6 +26,7 @@
 | 引擎契约、五笔状态机、回车策略 | [`WubiEngine.kt`](../../app/src/main/java/com/fanson/ime/engine/WubiEngine.kt) |
 | 英文前缀补全、韩语组字 | [`EnglishEngine.kt`](../../app/src/main/java/com/fanson/ime/engine/EnglishEngine.kt)、[`KoreanEngine.kt`](../../app/src/main/java/com/fanson/ime/engine/KoreanEngine.kt) |
 | 用户数据和五笔 SQL | [`LocalStore.kt`](../../app/src/main/java/com/fanson/ime/data/LocalStore.kt)，其中同时声明了 `WubiRepository` |
+| 数字行/标点长按、L 角标及引号光标 | [长按维护说明](KEYBOARD_SHORTCUTS.md)、`KeyboardShortcuts`、`CornerHintButton`、`PairedQuoteCursor` |
 | 候选条布局 | [`CandidateStrip.kt`](../../app/src/main/java/com/fanson/ime/keyboard/CandidateStrip.kt)、[`CandidateRowLayout.kt`](../../app/src/main/java/com/fanson/ime/keyboard/CandidateRowLayout.kt) |
 | 设置页面和偏好写入 | [`MainActivity.kt`](../../app/src/main/java/com/fanson/ime/settings/MainActivity.kt) |
 

@@ -14,16 +14,16 @@ class EnglishLexicon(rankedWords: List<String>) {
             val result = words.binarySearch(key)
             return if (result >= 0) result else -result - 1
         }
-        return words.subList(bound(lower), bound(lower + '{'))
+        val ordinary = words.subList(bound(lower), bound(lower + '{'))
             .sortedWith(compareBy<String> { it != lower }.thenBy { ranks[it] })
-            .take(80).map { word ->
-                val cased = when {
-                    prefix.all { it.isUpperCase() } -> word.uppercase(Locale.ROOT)
-                    prefix.first().isUpperCase() -> word.replaceFirstChar { it.uppercaseChar() }
-                    else -> word
-                }
-                Candidate(cased, "")
-            }
+            .take(80).map { word -> Candidate(EnglishContractions.cased(word, prefix), "") }
+        val shortcut = EnglishContractions.shortcut(prefix)
+        val priority = when {
+            shortcut != null -> listOf(Candidate(EnglishContractions.cased(shortcut, prefix), ""), Candidate(prefix, ""))
+            '\'' in prefix -> EnglishContractions.explicit(prefix).map { Candidate(EnglishContractions.cased(it, prefix), "") }
+            else -> emptyList()
+        }
+        return if (priority.isEmpty()) ordinary else (priority + ordinary).distinctBy { it.text }.take(80)
     }
 }
 
@@ -58,7 +58,14 @@ class EnglishEngine(private val lexicon: EnglishLexicon) : InputEngine {
     }
     override fun enter() = resolve()
     override fun space() = punctuation(" ")
-    override fun punctuation(text: String): EngineResult = resolve().let { it.copy(commits = it.commits + text) }
+    override fun punctuation(text: String): EngineResult {
+        if (enabled && text == "'" && code.isNotEmpty() && code.last().isLetter() && '\'' !in code && code.length < 64) {
+            code += text
+            refresh()
+            return EngineResult(composing = code)
+        }
+        return resolve().let { it.copy(commits = it.commits + text) }
+    }
     override fun backspace(): Boolean {
         if (code.isEmpty()) return false
         code = code.dropLast(1)

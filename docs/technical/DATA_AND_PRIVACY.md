@@ -87,6 +87,7 @@ PRAGMA user_version=1;
 | key | 默认值 | 取值与应用时机 |
 | --- | --- | --- |
 | `default_language` | `wubi86` | `english / wubi86 / korean`；设置中的默认语言；修改时与当前首选、回切目标在同一事务内保存；未知值回退五笔 |
+| `english_auto_capitalize` | `true` | 0.4.2 新增；英语句首大写，非法值回退 true，与拼写独立；无新增表或迁移 |
 | `input_language` | `default_language` | 新输入框读取；主动切换成功或五笔 Shift 进入英文时保存；旧安装保留原值，未知值回退五笔；字段自动覆盖不保存 |
 | `last_non_english_language` | 无记录 | 最近成功主动选择或离开的非英语语言；英语短按优先返回它，缺失/未知/误存英语时用非英语默认语言，默认也是英语则回退五笔；修改默认语言时重设 |
 | `wubi_enter_action` | `commit_code` | `commit_code / clear_code / first_candidate`；读取设置后在 worker 更新；未知值回退默认 |
@@ -96,12 +97,12 @@ PRAGMA user_version=1;
 | `haptic` | `false` | 三语共用轻震动开关，关闭保留已选强度 |
 | `haptic_strength` | `50` | 0–100 的整数字符串；缺失/非法值回退 50，超界夹到范围；0 不振动；触摸松手保存，无障碍/方向键单步保存；下次键盘显示读取并缓存效果。只用现有 preferences 表，无 schema 迁移 |
 | `roots` | `false` | 字根简要提示与长按卡片共用开关 |
-| `number_row` | `true` | 三种语言共用数字行 |
+| `number_row` | `true` | 三语共用数字行；开启时数字长按 PC 符号（中文 1/9/0 为全角）；逗号长按冒号，英语/韩语句号长按双引号；关闭时恢复叹号/问号。中文句号长按始终问号，简/繁长按引号独立于此开关；无新键或迁移 |
 | `symbol_auto_return` | `true` | “输入符号后返回键盘”；仅符号网格输入后的自动返回，关闭后连续输入并保留分类；不影响 emoji 或符号页辅助按键 |
 | `theme` | `system` | `system / light / dark`；创建 Palette；设置页更改后重建页面 |
 | `key_height` | `48` | 字符串整数，解析失败回退 48，限制 40～64 dp；横屏实际高度最多 40 dp |
 
-服务在 `onStartInput/onStartInputView` 读取设置。`traditional`、`spelling`、大小写、面板、读音和搜索词不在 `preferences`，不要误以为它们重启后也保持。
+服务在 `onStartInput/onStartInputView` 读取设置。`traditional`、`spelling`、英语临时大小写/取消状态、面板、读音和搜索词不在 `preferences`，不要误以为它们重启后也保持。
 
 ## 资源生成与复现
 
@@ -143,3 +144,7 @@ python tools\verify_assets.py
 - 退出面板和失效会话释放快照与预览文字。emoji 成功提交且非 `privateField` 时才累加次数；五笔只有开启学习、非隐私、非内部搜索且平台接受的候选提交才增加衰减分数，密码/隐私五笔也不使用个人排序。其余普通输入及读音查询不保存正文历史；词频不保存逐次事件或整段正文。
 
 Manifest 仅申请 `VIBRATE`；IME 服务导出并由 `BIND_INPUT_METHOD` 保护，启动 Activity 导出供桌面启用。`allowBackup=false` 同时配合 `backup_rules.xml`、`data_extraction_rules.xml` 排除云备份和设备迁移；数据位于无备份私有目录。无网络权限、无输入日志是维护约束，新增依赖、日志和外部组件时必须核对最终 APK。
+
+0.4.2 的英语句首判断会在边界操作调用宿主 getCursorCapsMode；位置核对仍只请求 0 个周边字符。不记录、学习或保存英语正文。32 项缩写为原创静态规则，无新增第三方词库、权限、依赖或后台任务；字段/回调边界见 [维护说明](ENGLISH_INPUT.md)。
+
+0.4.2 同版本中文引号定位会在提交被接受后临时请求光标前最多 1 个字符与位置，确认实际右引号再移动到中间；不读取全文，不记录/保存这个字符，不新增定时任务、权限、依赖或个人数据。失败/搜索隔离见 [长按维护说明](KEYBOARD_SHORTCUTS.md)。

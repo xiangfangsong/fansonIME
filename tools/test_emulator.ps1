@@ -1,4 +1,4 @@
-param([string]$Serial = 'emulator-5580')
+param([string]$Serial = 'emulator-5580', [ValidateSet('all', 'keyboard_shortcuts')][string]$Focus = 'all')
 $ErrorActionPreference = 'Stop'
 # Never use a physical phone, and never pick a device implicitly.
 if ($Serial -notmatch '^emulator-\d+$') { throw 'This smoke test is restricted to emulators.' }
@@ -18,7 +18,10 @@ Invoke-Adb -AdbArgs @('install', '-r', (Join-Path $projectRoot 'app\build\output
 Invoke-Adb -AdbArgs @('install', '-r', (Join-Path $projectRoot 'app\build\outputs\apk\androidTest\debug\app-debug-androidTest.apk'))
 Invoke-Adb -AdbArgs @('shell', 'ime', 'enable', 'com.fanson.ime/.ime.FansonInputMethodService')
 Invoke-Adb -AdbArgs @('shell', 'ime', 'set', 'com.fanson.ime/.ime.FansonInputMethodService')
-$result = & adb -s $Serial shell am instrument -w com.fanson.ime.test/com.fanson.ime.SmokeInstrumentation
+$instrumentArgs = @('shell', 'am', 'instrument', '-w')
+if ($Focus -ne 'all') { $instrumentArgs += @('-e', 'focus', $Focus) }
+$instrumentArgs += 'com.fanson.ime.test/com.fanson.ime.SmokeInstrumentation'
+$result = & adb -s $Serial @instrumentArgs
 $result | Write-Output
 if ($LASTEXITCODE -ne 0 -or ($result -join "`n") -notmatch 'INSTRUMENTATION_CODE: -1' -or ($result -join "`n") -match 'failure=') {
     throw 'Emulator smoke tests failed.'

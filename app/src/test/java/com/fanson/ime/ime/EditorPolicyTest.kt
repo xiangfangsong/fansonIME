@@ -6,6 +6,22 @@ import org.junit.Test
 import com.fanson.ime.engine.InputLanguage
 
 class EditorPolicyTest {
+    @Test fun sentenceRequestAlsoAcceptsThePlatformParagraphStartWordFlag() {
+        assertTrue(EditorPolicy.sentenceStart(InputType.TYPE_TEXT_FLAG_CAP_WORDS))
+        assertTrue(EditorPolicy.sentenceStart(InputType.TYPE_TEXT_FLAG_CAP_SENTENCES))
+        assertFalse(EditorPolicy.sentenceStart(0))
+        assertFalse(EditorPolicy.sentenceStart(InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS))
+    }
+    @Test fun englishAutomaticCaseOnlyAppliesToProseText() {
+        assertTrue(EditorPolicy.englishAutoCapitalize(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE))
+        for (variation in listOf(InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
+            InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD, InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+            InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS, InputType.TYPE_TEXT_VARIATION_URI, InputType.TYPE_TEXT_VARIATION_FILTER)) {
+            assertFalse(EditorPolicy.englishAutoCapitalize(InputType.TYPE_CLASS_TEXT or variation))
+        }
+        assertFalse(EditorPolicy.englishAutoCapitalize(InputType.TYPE_CLASS_NUMBER))
+        assertFalse(EditorPolicy.englishAutoCapitalize(InputType.TYPE_NULL))
+    }
     @Test fun ordinaryTextRespectsTheLastChosenLanguage() {
         for (language in InputLanguage.entries) assertEquals(language, EditorPolicy.initialLanguage(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE, language))
     }

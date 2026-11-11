@@ -40,7 +40,8 @@ class Ui(val context: Context, val palette: Palette) {
         text = value; textSize = size; setTextColor(color); gravity = Gravity.CENTER_VERTICAL
         setPadding(context.dp(8), context.dp(4), context.dp(8), context.dp(4))
     }
-    fun button(label: String, accent: Boolean = false, action: () -> Unit): Button = Button(context).apply {
+    fun button(label: String, accent: Boolean = false, action: () -> Unit): Button = styleButton(Button(context), label, accent, action)
+    private fun styleButton(button: Button, label: String, accent: Boolean, action: () -> Unit): Button = button.apply {
         text = label; textSize = 16f; isAllCaps = false; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
         setPadding(context.dp(3), 0, context.dp(3), 0)
         gravity = Gravity.CENTER
@@ -52,6 +53,12 @@ class Ui(val context: Context, val palette: Palette) {
         setOnClickListener { action() }
         contentDescription = label
     }
+    fun cornerHintButton(primary: String, alternate: String, insert: (String) -> Unit): Button =
+        styleButton(CornerHintButton(context, alternate, palette.muted), primary, false) { insert(primary) }.apply {
+            maxLines = 1
+            stateDescription = "长按输入$alternate"
+            setOnLongClickListener { insert(alternate); true }
+        }
     fun punctuationButton(primary: String, alternate: String, insert: (String) -> Unit): Button =
         button(primary) { insert(primary) }.apply {
             text = SpannableString("$alternate\n$primary").apply {

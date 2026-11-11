@@ -58,6 +58,7 @@ flowchart TD
 | `WubiEngine`、五笔 SQL、读音查询及 LRU | worker 单线程 | 可变引擎和 SQLite 查询串行，避免主线程执行五笔检索 |
 | 简繁映射、英文词表、emoji JSON 初次加载 | worker | 统一初始化；成功后再允许输入 |
 | `EnglishEngine` | worker 创建，之后主线程使用 | 英文预编辑状态与 composing 编辑同步，避免迟到光标回调打断新单词 |
+| `EnglishCapitalization` / `EnglishEditorPosition` | 服务主线程持有 | 句首/持续大写状态和预测光标；宿主句首查询及实际编辑仍经服务现有链路，见 [英语维护说明](ENGLISH_INPUT.md) |
 | `KoreanEngine` | 主线程 | 每次音节转换与宿主 composing 编辑同步 |
 | View、UI 状态快照、`InputConnection` 操作 | 主线程 | worker 通过 `publishInput()` 投递结果，不直接接触宿主编辑器 |
 | `WubiFrequency` | 共享同步模型；worker 查分/排序，主线程成功反馈，I/O 队列取快照 | 无 Android、SQL 或定时任务；只在短临界区访问内存 |
@@ -99,3 +100,5 @@ flowchart TD
 词频组件持有应用级 LocalStore 和模型，不随单个 IME 服务销毁关闭；不存在销毁兜底写盘，未保存词频允许随进程退出丢失。SQLite 增量迁移到 2，启用 WAL，但不将实例同步误认为跨连接业务锁。并发快照与清空的完整契约见 [词频维护说明](WUBI_FREQUENCY.md)。
 
 当前限制和后续验收方向见 [待改进事项](KNOWN_GAPS.md)，具体输入顺序见 [输入链路与引擎](INPUT_PIPELINE.md)。
+
+0.4.2 的英语大小写、位置预测和缩写规则均保持原主线程输入顺序，无新 worker 或定时器。onStartInputView 在读取设置后对齐英语当前位置并判断句首，语言选择进入英语时同样初始化；隐藏/会话失效清临时状态。新增的 english_auto_capitalize 设置持久化，临时取消和 CAPS 状态不落盘。详细职责见 [英语输入](ENGLISH_INPUT.md)。

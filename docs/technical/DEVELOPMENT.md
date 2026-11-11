@@ -1,6 +1,6 @@
 # 开发与验证
 
-基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.4.1 验证记录](../validation/VALIDATION-0.4.1.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。
+基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.4.2 验证记录](../validation/VALIDATION-0.4.2.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。
 
 ## 构建环境与命令
 
@@ -56,11 +56,13 @@ python tools\verify_assets.py
 
 ## 测试分层与源码入口
 
-当前有 10 个 JVM 测试文件、123 个 `@Test`；这是源码清点，执行状态以实际报告为准。
+当前有 14 个 JVM 测试文件、144 个 `@Test`；这是源码清点，执行状态以实际报告为准。
 
 | 层次/文件 | 验证内容 | 不能代替的验证 |
 | --- | --- | --- |
 | [`WubiEngineTest`](../../app/src/test/java/com/fanson/ime/engine/WubiEngineTest.kt) | 简码、四码/第五码、无匹配、回车策略、词组取码、reset | Android SQL、真实宿主时序 |
+| [`EnglishInputTest`](../../app/src/test/java/com/fanson/ime/engine/EnglishInputTest.kt) | 英语三状态、取消、缩写优先/原词、大小写、词内撇号与候选限额 | 实际宿主句首判断与触摸 |
+| [`EnglishEditorPositionTest`](../../app/src/test/java/com/fanson/ime/ime/EnglishEditorPositionTest.kt) | 预编辑锚点、候选/选区替换、删除、未知位置 | 宿主接受/调整编辑后的实际位置 |
 | [`CompletionTest`](../../app/src/test/java/com/fanson/ime/engine/CompletionTest.kt) | 简繁多义、实时转换、英文大小写/补全/原词提交 | composing 的真实替换效果 |
 | [`PronunciationTest`](../../app/src/test/java/com/fanson/ime/engine/PronunciationTest.kt) | 多音字、词组/逐字、扩展码点、Z 状态与自动提交保护 | 字典真实覆盖和长读音 UI |
 | [`KoreanEngineTest`](../../app/src/test/java/com/fanson/ime/engine/KoreanEngineTest.kt) | 全 11,172 现代音节与 NFC 对照、复合收音拆分、Shift、逐键回退 | Android 连续输入和光标回调 |
@@ -152,3 +154,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_emulator.ps1 -Ser
 ## 交付前记录
 
 功能版本更新 `app/build.gradle.kts` 与产品/版本文档；技术行为同步相应章节。验证记录统一放在 `docs/validation/` 并维护目录索引，写清日期、版本、实际命令、结果、测试环境、未验证项及最终 APK 路径/哈希。权限和签名检查针对最终 APK；历史记录不能替代本次产物检查。Git 提交、推送和真机操作按当前用户指示执行，文档整理本身不隐含这些外部动作。
+
+## 0.4.2 英语检查
+
+EnglishInputTest、EnglishEditorPositionTest 和扩展 EditorPolicyTest 验证纯规则；SmokeInstrumentation 的 checkEnglishInput 验证实际默认/持久化、首字母/取消/持续大写、快打、句末引号/换行/小数、光标/选区、关闭拼写、缩写候选替换和原词、L 真实长按、密码/邮箱/URI。新功能检查后显式关闭句首大写，再执行原历史小写断言；整套结束恢复默认 true。所有输入为合成数据，仅运行指定隔离模拟器。
+
+新增设置会改变页面高度；旧轻震动真实拖动用例请求滑动条下方额外留白后再确认屏幕位置，防止触点落入系统导航区域。实际失败/修正和最终结果见 [0.4.2 验证](../validation/VALIDATION-0.4.2.md)。
+
+## 0.4.2 同版本长按修订验证
+
+KeyboardShortcutsTest 当前 4 项（初次修订为 3 项）、PairedQuoteCursorTest 2 项，验证 PC 十键、开关/语言映射和引号光标边界；仪器新增七组 checkKeyboardShortcuts，覆盖 40dp/1.3 倍字体/深浅主题完整 L、三语数字及真实长按松手、预编辑确认、开关双态、引号各类插入位置与搜索隔离。旧 !/? 回归显式关闭数字行，并于整套末尾恢复默认 true。
+
+`tools/test_emulator.ps1 -Serial emulator-5580 -Focus keyboard_shortcuts` 只运行基础准备与专项检查，不能作完整回归证据；不传 Focus 为原完整回归，原模拟器限制不变。详细命令及结果见 [本版验证](../validation/VALIDATION-0.4.2.md)，交互和布局维护见 [长按说明](KEYBOARD_SHORTCUTS.md)。
+
+### 中文标点与简/繁键再调整
+
+用户确认其他功能通过后，补充中文数字 1/9/0 全角、句号长按问号、简/繁角标长按引号。KeyboardShortcutsTest 新增中文例外映射测试，当前 14 个 JVM 文件、144 项测试。checkKeyboardShortcuts 增加第八组：在数字行开/关和简/繁两态下真实长按不触发短按切换，短按仍切换且不改正文/光标；布局对比扩展到简/繁，数字 native 长按扩展 1/9/0。当前专项测试不应冒充重新执行过原完整 145 项，实际执行见版本验证。

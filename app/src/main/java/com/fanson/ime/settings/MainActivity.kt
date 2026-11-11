@@ -87,6 +87,8 @@ class MainActivity : Activity() {
         page.addView(ui.text("初始为五笔86；修改后从所选语言开始，日常记住当前语言。地球短按往返英语与当前语言，长按选择其他语言。", 13f, ui.palette.muted))
         toggle("输入符号后返回键盘", "symbol_auto_return", true)
         page.addView(ui.text("在符号页输入一个符号后返回主键盘；关闭后可连续输入符号。表情输入不受影响。", 13f, ui.palette.muted))
+        toggle("英语句首自动大写", "english_auto_capitalize", true)
+        page.addView(ui.text("句首自动大写首字母；点按 Shift 可取消本次大写。密码、邮箱、网址和数字输入不自动大写，与自动拼写开关独立。", 13f, ui.palette.muted))
         toggle("四码唯一自动上屏", "auto_unique", true)
         toggle("第五码提交首选并开始新编码", "fifth_commit", true)
         toggle("五笔按本地词频排序", "wubi_frequency", true)
