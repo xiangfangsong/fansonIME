@@ -12,14 +12,14 @@ class KeyboardShortcutsTest {
         assertEquals(listOf("！", "@", "#", "$", "%", "^", "&", "*", "（", "）"), "1234567890".map { KeyboardShortcuts.number(it, true) })
         assertNull(KeyboardShortcuts.number('a', true))
     }
-    @Test fun enabledNumberRowKeepsChineseQuestionMarkAndLatinQuote() {
+    @Test fun periodAlwaysUsesQuestionMarkAndEnabledRowUsesColon() {
         assertEquals("：", KeyboardShortcuts.comma(true, true))
-        assertEquals("？", KeyboardShortcuts.period(true, true))
+        assertEquals("？", KeyboardShortcuts.period(true))
         assertEquals(":", KeyboardShortcuts.comma(false, true))
-        assertEquals("\"", KeyboardShortcuts.period(false, true))
+        assertEquals("?", KeyboardShortcuts.period(false))
     }
     @Test fun disabledNumberRowPreservesOldExclamationAndQuestionShortcuts() {
-        assertEquals("！", KeyboardShortcuts.comma(true, false)); assertEquals("？", KeyboardShortcuts.period(true, false))
-        assertEquals("!", KeyboardShortcuts.comma(false, false)); assertEquals("?", KeyboardShortcuts.period(false, false))
+        assertEquals("！", KeyboardShortcuts.comma(true, false)); assertEquals("？", KeyboardShortcuts.period(true))
+        assertEquals("!", KeyboardShortcuts.comma(false, false)); assertEquals("?", KeyboardShortcuts.period(false))
     }
 }

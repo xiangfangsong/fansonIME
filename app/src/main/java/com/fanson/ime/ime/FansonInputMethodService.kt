@@ -659,7 +659,7 @@ class FansonInputMethodService : InputMethodService() {
         if (showNumberRow) {
             val numberRow = ui.row().apply { contentDescription = "数字行" }
             "1234567890".forEach { digit ->
-                ui.addWeighted(numberRow, ui.cornerHintButton(digit.toString(), KeyboardShortcuts.number(digit, chinese)!!, ::punct).apply { textSize = 18f }, height = keyHeight)
+                ui.addWeighted(numberRow, ui.cornerHintButton(digit.toString(), KeyboardShortcuts.number(digit, chinese)!!, insert = ::punct).apply { textSize = 18f }, height = keyHeight)
             }
             container.addView(numberRow)
         }
@@ -707,8 +707,10 @@ class FansonInputMethodService : InputMethodService() {
         }
         val bottom = ui.row()
         ui.addWeighted(bottom, ui.button("123") { switchPanel("numbers") }, 1.1f, keyHeight)
-        val languageKey = if (korean) ui.button("한/漢") {}.apply {
-            isEnabled = false; alpha = .55f
+        val languageKey = if (korean) (if (showNumberRow) ui.cornerHintButton("한/漢", "\"") { text ->
+            if (text == "\"") keyboardPunctuation(text)
+        } else ui.button("한/漢") {}).apply {
+            isEnabled = showNumberRow; alpha = .55f
             contentDescription = "한/漢（暂未开放）"
         } else if (chinese) ui.cornerHintButton(if (traditional && !emojiSearching) "繁" else "简", KeyboardShortcuts.QUOTE_PAIR) { text ->
             if (text == KeyboardShortcuts.QUOTE_PAIR) keyboardPunctuation(text)
@@ -721,17 +723,18 @@ class FansonInputMethodService : InputMethodService() {
         }.apply { contentDescription = if (traditional && !emojiSearching) "繁体输出，点击切换简体" else "简体输出，点击切换繁体" }
         else ui.iconButton(
             if (spelling && !password) R.drawable.ic_spelling_on else R.drawable.ic_spelling_off,
-            if (spelling && !password) "自动拼写已开启" else "自动拼写已关闭", spelling && !password
+            if (spelling && !password) "自动拼写已开启" else "自动拼写已关闭", spelling && !password,
+            alternate = if (showNumberRow) "\"" else null, insert = ::keyboardPunctuation
         ) {
             if (password) hint("密码框不启用自动拼写")
             else resolveThen { spelling = !spelling; renderBody(); renderCandidates() }
-        }.apply { isSelected = spelling && !password; isEnabled = !password }
+        }.apply { isSelected = spelling && !password; isEnabled = !password || showNumberRow }
         ui.addWeighted(bottom, languageKey, 1.2f, keyHeight)
         ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "，" else ",", KeyboardShortcuts.comma(chinese, showNumberRow), ::keyboardPunctuation), .8f, keyHeight)
         val space = spaceButton(showLanguage = true)
         space.setOnLongClickListener { showCursorControls(); true }
         ui.addWeighted(bottom, space, 3.3f, keyHeight)
-        ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "。" else ".", KeyboardShortcuts.period(chinese, showNumberRow), ::keyboardPunctuation), .8f, keyHeight)
+        ui.addWeighted(bottom, ui.punctuationButton(if (chinese) "。" else ".", KeyboardShortcuts.period(chinese), ::keyboardPunctuation), .8f, keyHeight)
         ui.addWeighted(bottom, enterButton(), 1.4f, keyHeight)
         container.addView(bottom)
         updatePronunciationKey()

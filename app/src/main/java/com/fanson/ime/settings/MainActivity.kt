@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Vibrator
 import android.provider.Settings
 import android.text.InputType
+import android.text.util.Linkify
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
@@ -152,6 +153,12 @@ class MainActivity : Activity() {
         val versionName = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
         page.addView(ui.text("放松输入法 · FansonIME $versionName · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0\n读音：pinyin-data / phrase-pinyin-data · MIT", 13f, ui.palette.muted))
         page.addView(ui.text("作者邮箱：cnxfs@foxmail.com", 15f).apply { setTextIsSelectable(true) })
+        listOf("https://gitee.com/xiangfangsong/fanson-ime", "https://github.com/xiangfangsong/fansonIME").forEach { url ->
+            page.addView(ui.text(url, 15f).apply {
+                setLinkTextColor(ui.palette.accent)
+                Linkify.addLinks(this, Linkify.WEB_URLS)
+            })
+        }
         page.addView(ui.button("第三方数据与许可") { showLicenses() }, LinearLayout.LayoutParams(-1, dp(48)))
         refreshStatus()
     }

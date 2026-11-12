@@ -53,8 +53,8 @@ class Ui(val context: Context, val palette: Palette) {
         setOnClickListener { action() }
         contentDescription = label
     }
-    fun cornerHintButton(primary: String, alternate: String, insert: (String) -> Unit): Button =
-        styleButton(CornerHintButton(context, alternate, palette.muted), primary, false) { insert(primary) }.apply {
+    fun cornerHintButton(primary: String, alternate: String, accent: Boolean = false, insert: (String) -> Unit): Button =
+        styleButton(CornerHintButton(context, alternate, if (accent) palette.accentInk else palette.muted), primary, accent) { insert(primary) }.apply {
             maxLines = 1
             stateDescription = "长按输入$alternate"
             setOnLongClickListener { insert(alternate); true }
@@ -70,8 +70,10 @@ class Ui(val context: Context, val palette: Palette) {
             stateDescription = "长按输入$alternate"
             setOnLongClickListener { insert(alternate); true }
         }
-    fun iconButton(icon: Int, description: String, accent: Boolean = false, action: () -> Unit): Button =
-        button("", accent, action).apply {
+    fun iconButton(icon: Int, description: String, accent: Boolean = false,
+                   alternate: String? = null, insert: (String) -> Unit = {}, action: () -> Unit): Button =
+        (if (alternate == null) button("", accent, action)
+        else cornerHintButton("", alternate, accent) { if (it == alternate) insert(it) else action() }).apply {
             foreground = context.getDrawable(icon)!!.mutate().apply { setTint(if (accent) palette.accentInk else palette.ink) }
             foregroundGravity = Gravity.CENTER
             contentDescription = description

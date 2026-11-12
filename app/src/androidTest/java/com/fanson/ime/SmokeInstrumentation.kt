@@ -352,7 +352,7 @@ class SmokeInstrumentation : Instrumentation() {
                     check(button.text.toString() == com.fanson.ime.engine.KoreanEngine.keyLabel(key).toString())
                     check(!button.isLongClickable)
                 }
-                check(!findButtonOnMain("한/漢（暂未开放）").isEnabled)
+                check(findButtonOnMain("한/漢（暂未开放）").stateDescription == "长按输入\"")
                 check(findButtonOnMain("␣ 한국어").contentDescription == "空格")
                 check(windows().filterIsInstance<Button>().none { visible(it) && it.contentDescription == "Z / 查读音" })
             }
@@ -1054,7 +1054,7 @@ class SmokeInstrumentation : Instrumentation() {
             }
             await { findButton("自动拼写已关闭") != null }
             checkCandidateArea(false)
-            check(!findButton("自动拼写已关闭")!!.isEnabled)
+            check(!findButton("自动拼写已关闭")!!.isSelected)
             "app".forEach { click(it.toString()) }
             await { editor.text.toString() == "app" }
             check(findButton("展开候选") == null && findText("英文：app") == null)
@@ -1423,7 +1423,7 @@ class SmokeInstrumentation : Instrumentation() {
                     val comma = if (chinese) "，" else ","
                     val period = if (chinese) "。" else "."
                     val colon = if (enabled) { if (chinese) "：" else ":" } else { if (chinese) "！" else "!" }
-                    val quote = if (chinese) "？" else if (enabled) "\"" else "?"
+                    val quote = if (chinese) "？" else "?"
                     check(findButton(comma)!!.stateDescription == "长按输入$colon")
                     check(findButton(period)!!.stateDescription == "长按输入$quote")
                     click(comma); click(period); await { editor.text.toString() == comma + period }
@@ -1433,6 +1433,63 @@ class SmokeInstrumentation : Instrumentation() {
                 }
             }
             passed += "number_row_toggle_changes_comma_period_long_press_in_all_languages_and_keeps_short_taps_ui"
+            for (enabled in listOf(true, false)) {
+                row(enabled)
+                for (language in listOf(InputLanguage.ENGLISH, InputLanguage.KOREAN)) {
+                    chooseLanguage(language); clear()
+                    fun functionKey(): Button = if (language == InputLanguage.KOREAN) findButton("한/漢（暂未开放）")!!
+                        else findButton("自动拼写已开启") ?: findButton("自动拼写已关闭")!!
+                    val description = functionKey().contentDescription.toString()
+                    val key = functionKey()
+                    runOnMainSync {
+                        check(key.isEnabled == (enabled || language == InputLanguage.ENGLISH))
+                        check(key.isLongClickable == enabled)
+                        if (enabled) {
+                            check(key is com.fanson.ime.keyboard.CornerHintButton && key.cornerHint == "\"")
+                            check(key.stateDescription == "长按输入\"")
+                        } else check(key.stateDescription == null)
+                    }
+                    if (enabled) {
+                        val keys = if (language == InputLanguage.ENGLISH) "app" else "rk"
+                        val word = if (language == InputLanguage.ENGLISH) "app" else "가"
+                        runOnMainSync { keys.forEach { findKeyboardButton(it).performClick() } }
+                        await { editor.text.toString() == word }
+                        longPress(description)
+                        await { editor.text.toString() == "$word\"" && cursor(word.length + 1) }
+                        check(functionKey().contentDescription.toString() == description)
+                        runOnMainSync { check(android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) == -1) }
+                        longPress("."); await { editor.text.toString() == "$word\"?" }
+                        screenshot(if (language == InputLanguage.ENGLISH) "54-english-function-quote-0.4.2" else "55-korean-function-quote-0.4.2")
+                    }
+                    val before = editor.text.toString()
+                    click(description)
+                    if (language == InputLanguage.ENGLISH) {
+                        val changed = if (description == "自动拼写已开启") "自动拼写已关闭" else "自动拼写已开启"
+                        await { findButton(changed) != null }
+                        if (enabled) {
+                            longPress(changed)
+                            await { editor.text.toString() == "$before\"" && findButton(changed) != null }
+                        }
+                        click(changed); await { findButton(description) != null }
+                    } else check(editor.text.toString() == before && functionKey().contentDescription.toString() == description)
+                }
+                val originalType = editor.inputType
+                runOnMainSync {
+                    editor.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                }
+                clear()
+                await { findButton("自动拼写已关闭") != null }
+                check(findButton("自动拼写已关闭")!!.isEnabled == enabled)
+                if (enabled) {
+                    longPress("自动拼写已关闭")
+                    await { editor.text.toString() == "\"" && cursor(1) }
+                    click("自动拼写已关闭")
+                    check(findButton("自动拼写已开启") == null && editor.text.toString() == "\"")
+                }
+                runOnMainSync { editor.inputType = originalType }
+                clear()
+            }
+            passed += "english_korean_function_quote_only_with_number_row_resolves_composing_keeps_short_actions_and_password_policy_ui"
             for (enabled in listOf(true, false)) {
                 row(enabled); chooseLanguage(InputLanguage.WUBI); clear()
                 for (label in listOf("简", "繁")) {
@@ -1475,8 +1532,8 @@ class SmokeInstrumentation : Instrumentation() {
             check(editor.text.toString() == "保留" && cursor(1))
             click("‹ 键盘"); await { findButton("简") != null }
             passed += "number_row_symbols_and_paired_quotes_keep_emoji_search_isolated_from_host_cursor_ui"
-            chooseLanguage(InputLanguage.ENGLISH); clear()
-            store.put("key_height", "40"); refresh()
+            // Start a separate editor session for the L screenshot after search checks.
+            store.put("key_height", "40"); store.put("input_language", "english"); clear()
             click("切换大小写")
             await {
                 var correct = false

@@ -13,6 +13,5 @@ object KeyboardShortcuts {
     }
     fun comma(chinese: Boolean, numberRow: Boolean): String =
         if (numberRow) { if (chinese) "：" else ":" } else { if (chinese) "！" else "!" }
-    fun period(chinese: Boolean, numberRow: Boolean): String =
-        if (chinese) "？" else if (numberRow) "\"" else "?"
+    fun period(chinese: Boolean): String = if (chinese) "？" else "?"
 }

@@ -150,3 +150,92 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/test_emulator.ps1 -Ser
 2026-11-11，用户在真机复验后明确反馈“验证通过，可以提交代码了”，据此确认最终 0.4.2 / 21 验收通过并授权 Git 提交，未授权推送。保留前面各包的真实测试与反馈过程，不把初次包或中间包追记为已通过最终验收。
 
 本轮仅同步验收状态及检查提交范围，没有修改运行代码、测试脚本或版本，也没有重新执行 144 JVM、43 项专项或此前 145 项完整回归。提交前重新执行资源校验、Markdown 本地链接及 Git 差异检查，复核既有测试报告与当前 APK 哈希；只暂存本次源码、测试、维护文档和合成截图，不包含本机配置、密钥、私有数据、日志或构建产物。提交标识以 Git 历史为准。
+
+## 2026-11-12 英韩功能键引号补记
+
+版本保持 **0.4.2 / 21**。数字行开启时，英语/韩语句号长按 `?`，逗号左侧功能键（拼写 / 한/漢）长按单个 `"`，逗号仍长按 `:`；关闭数字行时保持原布局与功能。复用 `CornerHintButton`、`Ui.iconButton` 和既有 `keyboardPunctuation`，句号映射去掉数字行参数。韩语仅开放引号长按，短按汉字转换仍未实现；密码框数字行开启时可长按引号，短按不能开启拼写。
+
+### 本轮命令与检查
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/start_test_emulator.ps1
+adb -s emulator-5580 shell getprop sys.boot_completed
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_debug.ps1 -Offline
+# 设置 JAVA_HOME 为本机 JDK 17 后，修正测试辅助调用并重新构建/检查：
+.\gradlew.bat :app:assembleDebugAndroidTest --offline --console=plain
+.\gradlew.bat :app:lintDebug --offline --console=plain
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/test_emulator.ps1 -Serial emulator-5580 -Focus keyboard_shortcuts
+# 补齐强调色按钮的提示颜色后，构建最终包并完整回归：
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_debug.ps1 -Offline
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/test_emulator.ps1 -Serial emulator-5580
+```
+
+- 离线构建、资源检查、Debug 和 androidTest 成功；本次 **14 个 JVM 文件、144 项测试，0 failures/errors/skipped；Lint XML 0 问题**。修正测试辅助调用后，androidTest 重建及 Lint 再次通过；应用代码未因此改变。构建保留原有 SHOW_FORCED 弃用提示。
+- 初次完整回归运行中，源码复查发现新增测试在 `runOnMainSync` 内调用了自身使用 `runOnMainSync` 的查找辅助函数；将查找移至外层，避免嵌套。为换用修正后的测试包，显式停止隔离模拟器内应用，旧运行因人为停止返回 `Process crashed / CODE 0`，不计为通过。日志 `.local/latin-shortcuts-full-0.4.2.log` 保留；未修改生产线程或输入链路。
+- 修正后的专项 **44 个唯一 passed 标记、count=44、CODE -1，脚本 exit 0**，包括基础准备及九组长按检查。新增检查覆盖数字行两态、英韩真实长按松手、预编辑完成、拼写开/关时长按不切换/短按仍切换、韩语占位短按和密码框边界。日志 `.local/latin-shortcuts-focused-r2-0.4.2.log`；该包尚未包含后续强调色角标颜色调整。
+- 最终包为强调色按钮角标使用 accentInk，普通按钮仍为 muted，避免英语拼写开启时对比不足；最终离线构建再次成功，JVM 与 Lint 结果保持上述数量。最终构建日志 `.local/latin-shortcuts-build-final-0.4.2.log`。
+- 最终包第一次完整回归在九组长按检查全部通过后，于旧 L 截图准备的 `chooseLanguage(ENGLISH)` 等待步骤超时，CODE 0，不能算完整通过；日志 `.local/latin-shortcuts-full-final-0.4.2.log` 保留。该步骤仅需建立英语截图会话，改为设置截图语言/键高并复用 `clear + refresh` 建立独立会话，保留 L 大写/单行断言；原语言菜单切换仍由完整套其他用例验证。未据此确认或修改生产语言切换规则。androidTest 与 Lint 重新通过，日志 `.local/latin-shortcuts-test-build-r3-0.4.2.log`。
+- 修正截图准备后重新执行完整回归，**147 个唯一 passed 标记、count=147、INSTRUMENTATION_CODE: -1，无 failure/Process crashed，脚本 exit 0**。包括全部九组长按检查、语言菜单切换与回切、英韩预编辑、原三语标点/数字行、五笔、面板、剪贴板及生命周期回归；最终日志 `.local/latin-shortcuts-full-r3-0.4.2.log`。本轮仅使用合成数据和指定隔离 API31 `emulator-5580`，结束后停止本次启动的模拟器，保留既有 AVD。
+- 静态检查：本轮修改文档的本地链接全部存在，`git diff --check` 通过；APK 归档与构建输出一致。未暂存本机配置、日志、私有数据或构建产物。
+
+### 产物与验收边界
+
+最终 APK：`dist/FansonIME-0.4.2-debug.apk`，10,416,740 字节，SHA-256 `c8e61f0cdca5283321c2e05aebf5ea2a28637a644dc054c1529e683edd6462f8`；与 Gradle 输出一致，旁有 sha256 文件。用 SDK 36.0.0 的 aapt 核对包名 `com.fanson.ime`、0.4.2 / 21、minSdk31 / targetSdk35、唯一权限 VIBRATE；apksigner 验证 v2 有效，证书 SHA-256 `ab6097e0e833022396da5aa6d697e8b065dee781ff64ac16c586105e764d4ba2` 保持。此前已验收包保留为 `.local/FansonIME-0.4.2-before-latin-adjustment.apk`。
+
+已从最终包回归中导出并查看 [英语功能键引号](../screenshots/54-english-function-quote-0.4.2.png) 和 [韩语功能键引号](../screenshots/55-korean-function-quote-0.4.2.png)：句号上方为问号、功能键右上角为单个直双引号；英语强调色背景上的提示可见，韩语主文字保留原灰色占位样式，无裁切。截图为隔离模拟器中的合成试打内容。
+
+### 真机覆盖安装（2026-11-12）
+
+用户明确要求安装真机以验证；操作前已告知覆盖安装并保留数据。核对唯一已连接的 HUAWEI NOH-AN00、API31，原安装为 0.4.2 / 21，更新时间 `2026-11-11 22:22:05`。安装前只备份公开代码 APK 到 `.local/phone-before-latin-adjustment-0.4.2.apk`，SHA-256 为 `2a76e8c28a393bf45c8ebb340cfa03ae9f312c5bcf683b9a8749f23727f07d6f`；新旧 APK 经 apksigner 核对签名一致。
+
+```powershell
+# PhoneSerial 为已核对的当前连接真机，不将真实序列号写入仓库。
+adb -s $PhoneSerial install -r dist/FansonIME-0.4.2-debug.apk
+adb -s $PhoneSerial shell dumpsys package com.fanson.ime
+adb -s $PhoneSerial shell pm path com.fanson.ime
+adb -s $PhoneSerial shell am start -W -n com.fanson.ime/.settings.MainActivity
+```
+
+安装返回 Success，版本仍为 0.4.2 / 21；首次安装时间保持 `2026-11-08 13:46:19`，更新时间变为 `2026-11-12 21:28:53`。安装后首次路径查询未满足本地守卫，重读包路径成功，再只读导出公开 APK 到 `.local/phone-after-latin-adjustment-0.4.2.apk`，SHA-256 与本轮最终包 `c8e61f0cdca5283321c2e05aebf5ea2a28637a644dc054c1529e683edd6462f8` 一致；应用启动 Status ok。
+
+没有卸载、清库、修改手机设置或默认输入法、注入测试正文、读取个人数据库/剪贴板或截取手机画面。**用户于 2026-11-12 明确确认本轮英韩修订真机验收通过，并授权提交，同时要求加入下方两个项目链接**；未授权推送。没有新增依赖、权限、设置键、数据库迁移或第三方内容；既有许可证保持。模拟器不能代替不同宿主、厂商字体、横屏、release 或长期体验验证。
+
+## 2026-11-12 项目链接与提交
+
+用户明确要求将英韩已验收改动与新增项目链接一起提交。版本保持 **0.4.2 / 21**。设置页作者邮箱下按顺序显示并链接到：
+
+- `https://gitee.com/xiangfangsong/fanson-ime`
+- `https://github.com/xiangfangsong/fansonIME`
+
+实现仅使用现有 `Ui.text` 与平台 `Linkify.WEB_URLS`，链接使用主题 accent 和原生下划线，邮箱仍可选择复制。没有新增依赖、权限、持久化、网页组件或输入数据传递。
+
+### 本轮实际检查
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_debug.ps1 -Offline
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/start_test_emulator.ps1
+adb -s emulator-5580 shell getprop sys.boot_completed
+adb -s emulator-5580 shell getprop ro.kernel.qemu
+adb -s emulator-5580 shell svc wifi disable
+adb -s emulator-5580 shell svc data disable
+adb -s emulator-5580 install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5580 shell am start -W -n com.fanson.ime/.settings.MainActivity
+# 1080×1920 隔离模拟器，向上滑动三次到关于区后导出 UI 与截图：
+adb -s emulator-5580 shell input swipe 500 1700 500 300 250
+adb -s emulator-5580 shell uiautomator dump /sdcard/project-links.xml
+adb -s emulator-5580 shell screencap -p /sdcard/project-links.png
+# 逐一实际点击，中间返回设置页；检查 ActivityTaskManager 的 ACTION_VIEW/Chrome：
+adb -s emulator-5580 shell input tap 360 1620
+adb -s emulator-5580 shell input keyevent 4
+adb -s emulator-5580 shell input tap 360 1695
+adb -s emulator-5580 logcat -d -s ActivityTaskManager:I
+```
+
+- 本次离线资源检查、Debug/测试 APK 构建、**144 项 JVM 测试（0 failures/errors/skipped）和零问题 Lint 通过**，构建日志 `.local/project-links-build-0.4.2.log`。本次只增加关于页链接，没有重新执行此前 147 项输入法完整回归；该结果保留在上方英韩修订记录。
+- UI XML 核对两个 TextView 的完整文本、大小写和顺序均与用户地址一致，位于作者邮箱下、第三方许可入口上；已导出并查看 [关于页项目链接截图](../screenshots/56-about-project-links-0.4.2.png)，两条链接完整可见、有下划线且无裁切。
+- 两次真实点击分别产生 Gitee/GitHub 的 ACTION_VIEW，并进入 Chrome，返回后原设置页仍可操作。模拟器 Chrome 为首次启动欢迎页，未接受初始化条款、未联网验证站点页面加载；本轮验证覆盖链接展示和浏览器调用。UI 与浏览器调用日志保存在 `.local/project-links-ui.xml`、`.local/project-links-browser-gitee.xml`、`.local/project-links-browser-intents.log`。仅使用已核对 qemu=1 的指定隔离模拟器，结束后关闭进程并保留 AVD。
+- 最终 APK `dist/FansonIME-0.4.2-debug.apk`，10,416,740 字节，SHA-256 `d4cb45fa0892503e9afa3e1336a43ad60710bf28e6b060a804bf906fc1851e92`，与本次 Gradle 输出一致。aapt 核对唯一权限仍为 VIBRATE，apksigner 验证签名有效且证书 SHA-256 仍为 `ab6097e0e833022396da5aa6d697e8b065dee781ff64ac16c586105e764d4ba2`。此前英韩验收包备份为 `.local/FansonIME-0.4.2-before-project-links.apk`。
+
+### 验收与提交范围
+
+英韩真机验收依据为本轮用户明确反馈；项目链接依据本段电脑端验证，并按用户同条指令纳入提交。手机仍保留此前已验收的英韩包，本轮未再次覆盖安装真机。提交前检查源码、测试、文档和合成截图，不纳入本机配置、日志、密钥、私有数据及构建产物；提交标识以 Git 历史为准，未授权推送。

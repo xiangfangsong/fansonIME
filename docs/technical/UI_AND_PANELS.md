@@ -58,7 +58,7 @@ val showCandidates = inputPanel && currentCode.isNotEmpty() && !password &&
 
 | 面板 | 输入路径与局部状态 |
 | --- | --- |
-| 主键盘 | 字母进入当前引擎，数字行调用 `punct()`；简繁只用于五笔，拼写只用于英文，韩语“한/漢”禁用 |
+| 主键盘 | 字母进入当前引擎，数字行调用 `punct()`；简繁只用于五笔，拼写只用于英文；韩语“한/漢”短按未开放，数字行开启时允许引号长按 |
 | 数字 | 数字/运算符/下划线通过 `punct()`；返回不改语言，布局独立于主键盘数字行 |
 | 符号 | 每次创建默认“常用”；分类条保留实例，切类只替换固定顺序网格，完整字符串经 `insertSymbol()` 复用 `punct()`；默认提交后回主键盘，可在设置关闭 |
 | emoji 浏览 | 根据类别/搜索/字形过滤后取页面；点击完整序列直接插入宿主 |
@@ -78,7 +78,7 @@ val showCandidates = inputPanel && currentCode.isNotEmpty() && !password &&
 
 `spaceButton(showLanguage)` 显式区分显示场景：`renderKeyboard()` 传 `true`，显示“␣＋当前语言”；`renderSymbols()` 传 `false`，只显示“␣”，同时不附加语言 `stateDescription`。两处都保留“空格”无障碍名称并调用既有 `space()`，不因标签差异改变输入。emoji 五笔搜索复用主键盘时也显示语言；主键盘空格长按光标控制保持。
 
-三种语言的逗号、句号均通过 `Ui.punctuationButton()` 创建。0.4.2 修订后：关闭顶部数字行时，中文长按分别输入全角“！”“？”，英文/韩语为半角 `!`、`?`；开启时中文改为“：”但句号仍为“？”，英文/韩语为 `:` 和单个直双引号；中文成对引号改为简/繁键右上角提示与长按，保留原主字位置及短按切换，短按均保持原标点。键帽采用“长按符号在上、短按符号在下”，上行较小且使用淡色，短按主符号保持原字号。`contentDescription` 仍为原标点，`stateDescription` 说明长按输出；`OnLongClickListener` 返回 `true`，由 Android Button 消费长按并抑制松手后的短按，不使用自建定时器或重复提交逻辑。
+三种语言的逗号、句号均通过 `Ui.punctuationButton()` 创建。0.4.2 修订后：关闭顶部数字行时，中文长按分别输入全角“！”“？”，英文/韩语为半角 `!`、`?`；开启时中文为“：”“？”，英文/韩语为 `:`、`?`。英韩单个直双引号仅在数字行开启时位于逗号左侧功能键右上角及长按，英文保留短按拼写切换，韩语短按无操作、隐藏数字行后仍禁用。中文成对引号位于简/繁键右上角提示与长按，与数字行无关。短按均保持原标点。标点键帽采用“长按符号在上、短按符号在下”，上行较小且使用淡色，短按主符号保持原字号。`contentDescription` 仍为原标点，`stateDescription` 说明长按输出；`OnLongClickListener` 返回 `true`，由 Android Button 消费长按并抑制松手后的短按，不使用自建定时器或重复提交逻辑。
 
 短按和长按均通过服务的 `punct()` 进入当前引擎：有五笔候选先确认首选，无匹配保留编码并提示；英文和韩语先确认原预编辑再追加标点；搜索模式写入 `emojiQuery`，不直接写宿主正文。符号页网格中的符号仍直接选择，快捷键用于三种语言主键盘及复用该键盘的五笔搜索。
 
@@ -122,10 +122,12 @@ val showCandidates = inputPanel && currentCode.isNotEmpty() && !password &&
 
 关于页增加可选择复制的 `作者邮箱：cnxfs@foxmail.com`，不配置发送动作，不新增网络权限或外部邮件调用。API 依据：[振幅能力](https://developer.android.com/reference/android/os/Vibrator#hasAmplitudeControl())、[单次效果参数](https://developer.android.com/reference/android/os/VibrationEffect#createOneShot(long,int))；仅参考平台契约，未引入第三方代码或依赖。
 
+2026-11-12 在邮箱下按 Gitee、GitHub 顺序增加两个独立 TextView，显示用户提供的完整 HTTPS 地址。复用 `Ui.text` 和主题 accent 链接颜色，通过平台 `Linkify.WEB_URLS` 生成 URLSpan 并启用原生链接点击；由系统 ACTION_VIEW 交给浏览器，不内嵌 WebView、不添加 INTERNET 权限、不读取或附带输入内容。邮箱可选择复制的行为保持。验证见 [链接补记](../validation/VALIDATION-0.4.2.md#2026-11-12-项目链接与提交)。
+
 ## 0.4.2 英语 Shift 和撇号
 
 英语 Shift 三个矢量图标分别为 ic_shift、ic_shift_auto、ic_caps，配合状态说明区分小写、句首自动大写和手动持续大写。自动状态输入一个字母后立即恢复小写键帽；点按取消当前词自动大写，支持退格删空保持。设置“英语句首自动大写”默认开启，独立于拼写。英语 L 使用 cornerHintButton 在右上角独立绘制灰色撇号，恢复普通单行字母基线，短按依然传字母，长按只传撇号，不追加 l。韩语和五笔键位/长按保持。完整规则见 [英语维护说明](ENGLISH_INPUT.md)，验收见 [0.4.2 验证](../validation/VALIDATION-0.4.2.md)。
 
 ## 0.4.2 同版本长按修订
 
-顶部数字行长按以 PC !@#$%^&*() 为基础，中文 1/9/0 改为 ！/（/），英语/韩语保持半角。数字、L 和简/繁角标独立绘制于右上角，不挤动主文字；中文句号长按始终为全角问号，成对引号位于简/繁键长按，与数字行无关。数字行开关对逗号及英语/韩语句号长按的规则保持。中文成对引号使用原成功提交回调，核对光标前一个右引号后移动到中间；搜索只改内部关键词。布局、映射、UTF-16 位置与失败处理详见 [长按维护说明](KEYBOARD_SHORTCUTS.md)。
+顶部数字行长按以 PC !@#$%^&*() 为基础，中文 1/9/0 改为 ！/（/），英语/韩语保持半角。数字、L 和三语左侧功能键角标复用 `CornerHintButton`，不挤动主文字；`Ui.iconButton` 可选角标共用该入口，保留原图标/强调色。句号长按始终为对应语言问号；英韩功能键引号仅随数字行开启，中文简/繁成对引号与数字行无关。中文成对引号使用原成功提交回调，核对光标前一个右引号后移动到中间；搜索只改内部关键词。布局、映射、UTF-16 位置与失败处理详见 [长按维护说明](KEYBOARD_SHORTCUTS.md)。
