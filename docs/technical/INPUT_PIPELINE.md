@@ -14,7 +14,7 @@
 | `resolve()` | 在切换动作前确认当前输入 | 不凭空添加空格；五笔无匹配时保留编码 |
 | `reset()` | 丢弃引擎临时状态 | 不等于提交正文；也不直接调用宿主 `finishComposingText()` |
 
-五笔和英文均维护 `code/candidates`，五笔额外维护 `showingReadings`。韩语维护一个 `Syllable(initial, vowel, final)` 与当前音节的回退栈。Android 编辑器不是引擎依赖；引擎返回值由服务解释。
+五笔、全拼和英文均维护 `code/candidates`，五笔额外维护 `showingReadings`。韩语维护一个 `Syllable(initial, vowel, final)` 与当前音节的回退栈。Android 编辑器不是引擎依赖；引擎返回值由服务解释。全拼规则与临时 Z 切换的 FIFO 清码屏障见 [拼音说明](PINYIN_INPUT.md)。
 
 ## 普通按键到上屏
 
@@ -37,7 +37,7 @@ sequenceDiagram
     S->>S: 刷新候选和提示；code 为空才执行 after
 ```
 
-`enqueue()` 是普通操作入口；`deleteKey()` 与 `enter()` 有各自的结果应用分支，修改统一提交逻辑时必须一起检查。五笔使用 worker；英文、韩语的 `inputTask()` 和 `publishInput()` 都同步执行。`commitText()` 自身也使用批编辑，可能嵌套于 `editorBatch()`。
+`enqueue()` 是普通操作入口；`deleteKey()` 与 `enter()` 有各自的结果应用分支，修改统一提交逻辑时必须一起检查。五笔、全拼使用 worker；英文、韩语的 `inputTask()` 和 `publishInput()` 都同步执行。三处均捕获 activeLanguage，临时拼音不误用五笔词频或宿主 composing。`commitText()` 自身也使用批编辑，可能嵌套于 `editorBatch()`。
 
 `resolveThen(action)` 等价于 `enqueue({ it.resolve() }, action)`。服务用“操作后的 `code` 是否为空”判断是否继续打开面板、切语言、打开设置或光标控制；不是只看是否产生提交结果。
 
@@ -47,9 +47,9 @@ sequenceDiagram
 
 ## 会话、顺序和过期结果
 
-服务在任务入队前记录 `session.get()`，在引擎操作前及主线程应用结果前分别比较令牌。会话失效后，尚未执行的旧操作跳过，已计算出的旧发布结果也跳过。五笔 reset 排在同一 worker 队列，后续新会话操作在其后执行。
+服务在任务入队前记录 `session.get()`，在引擎操作前及主线程应用结果前分别比较令牌。会话失效后，尚未执行的旧操作跳过，已计算出的旧发布结果也跳过。五笔和全拼 reset 排在同一 worker 队列，后续新会话操作在其后执行。
 
-同一会话的五笔操作遵循 worker FIFO，主线程按投递顺序接收结果。这里没有额外的“每次查询递增序号”，也不是只保留最新按键结果：中间结果可能包含四码或第五码的正文提交，直接丢弃会丢字。
+同一会话的五笔和全拼操作遵循 worker FIFO，主线程按投递顺序接收结果。这里没有额外的“每次查询递增序号”，也不是只保留最新按键结果：中间结果可能包含四码或第五码的正文提交，直接丢弃会丢字。
 
 候选按钮捕获 `Candidate`。实际选词时在**当前引擎候选**中按 `text + code` 重新找索引，找不到提示“候选已更新，请重新选择”；不直接拿旧 UI 的整数索引上屏。`CandidateStrip.revision` 仅保护候选布局的延迟溢出回调，不是引擎查询版本。
 
@@ -120,7 +120,7 @@ ekfr → 닭；ekfrk → 已提交 달 + composing 가
 
 0.4.2 的 `onUpdateSelection()` 对英语使用预测位置和零字符实时位置核对，真实光标/选区变化时清当前词并重算句首大写；自身及过期编辑回调不会重置取消状态。韩语仍仅在 `currentCode` 非空时执行预编辑位置检查。当新选区不位于 composing 末尾时，用 `getSurroundingText(0,0,0)` 核对当前真实光标；能确认回调过期则忽略。真实光标/选区变化时结束 composing、递增会话、清空英文和韩语引擎及候选，后续输入不替换旧位置。
 
-这个零长度查询用于取得位置，不读取正文。退格是另一条链路，会读取光标前最多 512 个 UTF-16 单元；不要把两者混成“从不读取周边文字”。五笔目前没有同样的光标变更清码分支。
+这个零长度查询用于取得位置，不读取正文。退格是另一条链路，会读取光标前最多 512 个 UTF-16 单元；不要把两者混成“从不读取周边文字”。五笔和全拼目前没有同样的光标变更清码分支。
 
 空码回车和韩语回车按 `IME_MASK_ACTION` 取宿主动作；设置 `IME_FLAG_NO_ENTER_ACTION` 或动作为 NONE/UNSPECIFIED 时提交换行，其余调用 `performEditorAction()`。搜索模式回车只更新内部搜索，不触发宿主动作。
 

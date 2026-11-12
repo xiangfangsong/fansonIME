@@ -1,5 +1,7 @@
 # 文档导航
 
+当前开发版本 0.5.0 / 22，新增 [全拼与五笔临时拼音](technical/PINYIN_INPUT.md)，用户已确认本版真机验收通过并授权提交，未授权推送，实际状态见 [0.5.0 验证](validation/VALIDATION-0.5.0.md)。下方为历史验收记录。
+
 
 产品文档解释功能与交互，技术文档解释代码如何实现，版本验证记录保存当次验收证据。新增功能时需要同步维护对应技术章节，不能只在版本记录里追加说明。
 
@@ -12,12 +14,13 @@
 | 文档 | 解决的问题 |
 | --- | --- |
 | [架构与运行时](technical/ARCHITECTURE.md) | 模块职责、依赖、初始化、线程归属、生命周期和实现决策 |
-| [输入链路与引擎](technical/INPUT_PIPELINE.md) | 按键到上屏、三种引擎、会话隔离、回车、退格和光标处理 |
+| [输入链路与引擎](technical/INPUT_PIPELINE.md) | 按键到上屏、四种引擎、会话隔离、回车、退格和光标处理 |
 | [界面与面板](technical/UI_AND_PANELS.md) | 顶部行、候选测量、面板状态、emoji 搜索、弹层和事件入口 |
 | [数据与隐私](technical/DATA_AND_PRIVACY.md) | 数据库结构、设置键、资源生成、缓存、剪贴板和持久化边界 |
 | [开发与验证](technical/DEVELOPMENT.md) | 构建命令、测试分层、修改入口、排查顺序和交付记录 |
 | [主键盘长按维护](technical/KEYBOARD_SHORTCUTS.md) | L 角标、PC 数字行、开关双态标点、中文引号及光标安全条件 |
 | [英语输入维护](technical/ENGLISH_INPUT.md) | 句首判断、三状态 Shift、取消/位置回调、缩写表及性能/隐私边界 |
+| [离线全拼与临时拼音](technical/PINYIN_INPUT.md) | 正式/临时共用引擎、Z 切换屏障、只读数据、许可和维护 |
 | [五笔本地词频](technical/WUBI_FREQUENCY.md) | 衰减算法、参数、来源与简繁、内存容量、隐藏保存、并发与清空、迁移和维护 |
 | [待改进事项](technical/KNOWN_GAPS.md) | 已确认的实现限制、测试缺口及后续优化的验收方向 |
 | [技术方案模板](technical/PROPOSAL_TEMPLATE.md) | 新增功能或跨模块改动前，如何记录设计与验证计划 |

@@ -58,7 +58,7 @@ class MainActivity : Activity() {
         page.addView(start)
         section("本地试打")
         val sample = EditText(this).apply {
-            hint = "点这里试试五笔、emoji 和剪贴板"
+            hint = "点这里试试五笔、拼音、emoji 和剪贴板"
             textSize = 17f; setTextColor(ui.palette.ink); setHintTextColor(ui.palette.muted)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
             gravity = Gravity.TOP or Gravity.START
@@ -151,7 +151,7 @@ class MainActivity : Activity() {
         clearButton("清空五笔词频", "清除五笔学习记录，恢复初始候选顺序；自定义短语、emoji 次数、设置和剪贴板保留。开关保持原状态，开启时可重新学习。", "已清空五笔词频") { it.clearFrequency() }
         section("关于")
         val versionName = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
-        page.addView(ui.text("放松输入法 · FansonIME $versionName · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0\n读音：pinyin-data / phrase-pinyin-data · MIT", 13f, ui.palette.muted))
+        page.addView(ui.text("放松输入法 · FansonIME $versionName · Android 12+\n五笔码表：Rime wubi86 / LGPL-3.0\n拼音：万象数据 / CC BY 4.0 · THUOCL / MIT\nEmoji：Unicode 16.0 / CLDR 46\n简繁：OpenCC 1.1.9 / Apache-2.0\n英文词表：FrequencyWords 2018 / CC BY-SA 4.0\n读音：pinyin-data / phrase-pinyin-data · MIT", 13f, ui.palette.muted))
         page.addView(ui.text("作者邮箱：cnxfs@foxmail.com", 15f).apply { setTextIsSelectable(true) })
         listOf("https://gitee.com/xiangfangsong/fanson-ime", "https://github.com/xiangfangsong/fansonIME").forEach { url ->
             page.addView(ui.text(url, 15f).apply {
@@ -247,7 +247,7 @@ class MainActivity : Activity() {
         }.setNegativeButton("关闭", null).show()
     }
     private fun showLicenses() {
-        val names = arrayOf("RIME-AUTHORS.txt", "RIME-LGPL-3.0.txt", "GPL-3.0.txt", "UNICODE-LICENSE.txt", "COMPLETION-NOTICE.txt", "OPENCC-AUTHORS.txt", "OPENCC-LICENSE.txt", "CC-BY-SA-4.0.txt", "FREQUENCYWORDS-README.md", "WUBI-ROOTS-NOTICE.txt", "ARPHICPL.TXT", "FONT-COPYRIGHT.txt", "UPSTREAM-FONT-CHANGES.adoc", "PRONUNCIATION-NOTICE.txt", "pinyin-data-MIT.txt", "phrase-pinyin-data-MIT.txt")
+        val names = arrayOf("RIME-AUTHORS.txt", "RIME-LGPL-3.0.txt", "GPL-3.0.txt", "UNICODE-LICENSE.txt", "COMPLETION-NOTICE.txt", "OPENCC-AUTHORS.txt", "OPENCC-LICENSE.txt", "CC-BY-SA-4.0.txt", "FREQUENCYWORDS-README.md", "WUBI-ROOTS-NOTICE.txt", "ARPHICPL.TXT", "FONT-COPYRIGHT.txt", "UPSTREAM-FONT-CHANGES.adoc", "PRONUNCIATION-NOTICE.txt", "pinyin-data-MIT.txt", "phrase-pinyin-data-MIT.txt", "PINYIN-NOTICE.txt", "PINYIN-CC-BY-4.0.txt", "PINYIN-LICENSE-SCOPE.md", "PINYIN-UPSTREAM-NOTICE.md", "THUOCL-MIT.txt")
         AlertDialog.Builder(this).setTitle("第三方数据许可").setItems(names) { _, i ->
             val scroll = ScrollView(this)
             scroll.addView(ui.text(assets.open("licenses/${names[i]}").bufferedReader().use { it.readText() }, 12f))

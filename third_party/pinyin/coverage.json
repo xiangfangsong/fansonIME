@@ -1,0 +1,15 @@
+{
+  "entries": 324206,
+  "characters": 43328,
+  "words": 250038,
+  "raw_valid_rows": {
+    "zi.dict.yaml": 51050,
+    "jichu.dict.yaml.gz": 1537808
+  },
+  "thuocl_supplemented_words": 38,
+  "canonical_entries": 299392,
+  "spelling_alias_entries": 24814,
+  "word_entry_limit": 250000,
+  "max_word_characters": 8,
+  "completion_rows": 64895
+}

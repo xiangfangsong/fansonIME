@@ -19,6 +19,7 @@ import com.fanson.ime.clipboard.ClipboardSnapshot
 import com.fanson.ime.data.LocalStore
 import com.fanson.ime.data.WubiRepository
 import com.fanson.ime.data.PronunciationRepository
+import com.fanson.ime.data.PinyinRepository
 import com.fanson.ime.data.WubiFrequencyStore
 import com.fanson.ime.engine.FrequencyPermit
 import com.fanson.ime.emoji.Emoji
@@ -34,6 +35,7 @@ import com.fanson.ime.engine.EnglishLexicon
 import com.fanson.ime.engine.TraditionalConverter
 import com.fanson.ime.engine.InputLanguage
 import com.fanson.ime.engine.KoreanEngine
+import com.fanson.ime.engine.PinyinEngine
 import com.fanson.ime.keyboard.Palette
 import com.fanson.ime.keyboard.KeyboardShortcuts
 import com.fanson.ime.keyboard.HapticFeedback
@@ -59,6 +61,8 @@ class FansonInputMethodService : InputMethodService() {
     private var ready = false
     private var loadFailed = false
     private var engine: WubiEngine? = null // worker-confined
+    private var pinyinEngine: PinyinEngine? = null // worker-confined
+    private var pinyinRepository: PinyinRepository? = null
     private var englishEngine: EnglishEngine? = null // loaded on worker, then main-thread confined
     private val koreanEngine = KoreanEngine() // main-thread confined
     private var repository: WubiRepository? = null
@@ -78,7 +82,13 @@ class FansonInputMethodService : InputMethodService() {
     private var showingReadings = false
     private var pronunciationKey: Button? = null
     private var language = InputLanguage.WUBI
-    private val chinese get() = language == InputLanguage.WUBI
+    private var temporaryPinyin = false
+    private var temporaryPinyinToast: Toast? = null
+    private val wubiKeyboard get() = language == InputLanguage.WUBI
+    private val activeLanguage get() = if (wubiKeyboard && temporaryPinyin) InputLanguage.PINYIN else language
+    private val InputLanguage.workerBacked get() = this == InputLanguage.WUBI || this == InputLanguage.PINYIN
+    private val chinese get() = language.workerBacked
+    private val pinyin get() = activeLanguage == InputLanguage.PINYIN
     private val english get() = language == InputLanguage.ENGLISH
     private val korean get() = language == InputLanguage.KOREAN
     private var koreanShift = false
@@ -139,6 +149,8 @@ class FansonInputMethodService : InputMethodService() {
                 // Learning failure must not prevent ordinary dictionary input.
                 frequency = try { WubiFrequencyStore.get(this) } catch (_: Exception) { null }
                 engine = WubiEngine(repository!!, converter, pronunciation, frequency?.model)
+                pinyinRepository = PinyinRepository(this)
+                pinyinEngine = PinyinEngine(pinyinRepository!!, converter)
                 val words = assets.open("english.txt").bufferedReader().use { it.readLines() }
                 englishEngine = EnglishEngine(EnglishLexicon(words))
                 emoji = EmojiRepository(this)
@@ -206,12 +218,14 @@ class FansonInputMethodService : InputMethodService() {
         cancelRepeat()
         currentCode = ""; candidateSnapshot = emptyList(); expanded = false
         showingReadings = false
+        temporaryPinyin = false
+        temporaryPinyinToast?.cancel(); temporaryPinyinToast = null
         emojiQuery = ""; emojiSearching = false; emojiPage = 0
         emojiCategoryStrip = null; emojiCategoryScrollX = 0
         englishEngine?.reset()
         englishCase.reset()
         koreanEngine.reset(); koreanShift = false
-        if (!destroyed && !worker.isShutdown) worker.execute { engine?.reset() }
+        if (!destroyed && !worker.isShutdown) worker.execute { engine?.reset(); pinyinEngine?.reset() }
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
@@ -237,24 +251,25 @@ class FansonInputMethodService : InputMethodService() {
         frequency?.model?.accept(result, index, accepted, permit, System.currentTimeMillis())
     }
 
-    /** SQL-backed Wubi runs on the worker. In-memory English mutates with its
+    /** SQL-backed Chinese engines run on the worker. In-memory English mutates with its
      * composing edits on main, so cursor reports cannot split a queued word. */
     private fun inputTask(mode: InputLanguage, token: Long, operation: (InputEngine) -> Unit) {
         val task = Runnable {
             if (destroyed || token != session.get()) return@Runnable
             val e: InputEngine = when (mode) {
                 InputLanguage.WUBI -> engine
+                InputLanguage.PINYIN -> pinyinEngine
                 InputLanguage.ENGLISH -> englishEngine
                 InputLanguage.KOREAN -> koreanEngine
             } ?: return@Runnable
             operation(e)
         }
-        if (mode == InputLanguage.WUBI) worker.execute(task) else task.run()
+        if (mode.workerBacked) worker.execute(task) else task.run()
     }
 
     private fun publishInput(mode: InputLanguage, token: Long, action: () -> Unit) {
         val task = Runnable { if (!destroyed && token == session.get()) action() }
-        if (mode == InputLanguage.WUBI) main.post(task) else task.run()
+        if (mode.workerBacked) main.post(task) else task.run()
     }
 
     private fun enqueue(operation: (InputEngine) -> EngineResult, after: (() -> Unit)? = null, onCommitted: (() -> Unit)? = null) {
@@ -262,12 +277,13 @@ class FansonInputMethodService : InputMethodService() {
         if (!ready) { hint(if (loadFailed) "离线数据加载失败，请重新打开输入法" else "正在准备离线码表"); return }
         val token = session.get()
         val search = emojiSearching
-        val mode = language
+        val mode = activeLanguage
         val useTraditional = traditional && !search
         val useSpelling = spelling && !password
         val permit = learningPermit(mode, search)
         inputTask(mode, token) { e ->
             if (e is WubiEngine) { e.frequencyEnabled = permit.allowed; e.traditionalMode = useTraditional }
+            if (e is PinyinEngine) e.traditionalMode = useTraditional
             if (e is EnglishEngine) e.enabled = useSpelling
             val result = operation(e)
             val code = e.code
@@ -383,7 +399,7 @@ class FansonInputMethodService : InputMethodService() {
         if (destroyed || !ready) return
         val token = session.get()
         val search = emojiSearching
-        val mode = language
+        val mode = activeLanguage
         val permit = learningPermit(mode, search)
         inputTask(mode, token) { e ->
             if (e is WubiEngine) e.frequencyEnabled = permit.allowed
@@ -396,7 +412,7 @@ class FansonInputMethodService : InputMethodService() {
                         if (search) { emojiQuery = dropLastCluster(emojiQuery); emojiPage = 0; renderBody() }
                         else deleteEditorCluster()
                     }
-                    else if (mode != InputLanguage.WUBI) {
+                    else if (!mode.workerBacked) {
                         setComposing(code)
                         if (code.isEmpty()) finishComposing()
                     }
@@ -441,7 +457,7 @@ class FansonInputMethodService : InputMethodService() {
         vibrate()
         val token = session.get()
         val search = emojiSearching
-        val mode = language
+        val mode = activeLanguage
         val permit = learningPermit(mode, search)
         inputTask(mode, token) { e ->
             if (e is WubiEngine) e.frequencyEnabled = permit.allowed
@@ -553,19 +569,24 @@ class FansonInputMethodService : InputMethodService() {
         toolbar?.visibility = if (showCandidates) View.GONE else View.VISIBLE
         candidateRow?.visibility = if (showCandidates) View.VISIBLE else View.GONE
         val row = candidateRow ?: return
-        val composition = if (showCandidates) "${if (!chinese) "英文" else if (emojiSearching) "搜索编码" else "编码"}：$currentCode" else ""
-        row.submit(candidateSnapshot, expanded, if (chinese) wubiEnterAction.noMatchHint else "无匹配，回车提交字母", composition, chinese && showingReadings)
+        val composition = if (showCandidates) "${if (!chinese) "英文" else if (emojiSearching) "搜索编码" else if (pinyin) "拼音" else "编码"}：$currentCode" else ""
+        val noMatch = when { pinyin -> "无匹配，退格修正 / 回车上屏拼音"; chinese -> wubiEnterAction.noMatchHint; else -> "无匹配，回车提交字母" }
+        row.submit(candidateSnapshot, expanded, noMatch, composition, wubiKeyboard && showingReadings)
         updatePronunciationKey()
     }
 
     private fun updatePronunciationKey() {
         pronunciationKey?.let { key ->
-            val active = chinese && showingReadings
-            key.stateDescription = if (active) "读音已显示，再按恢复五笔提示" else "空闲输入 z，有候选时查读音"
-            if (key.isSelected == active) return@let
+            val active = temporaryPinyin || showingReadings
+            key.stateDescription = when {
+                temporaryPinyin -> "临时拼音已开启，长按退出；点按输入 z"
+                showingReadings -> "读音已显示，再按恢复五笔提示；长按进入临时拼音"
+                else -> "空闲输入 z，有候选时查读音；长按进入临时拼音"
+            }
             key.isSelected = active
-            key.background = ui.button("", active) {}.background
-            key.foreground?.setTint(if (active) ui.palette.accentInk else ui.palette.ink)
+            // A dark logo on a light selection remains distinct in both themes.
+            key.background = if (temporaryPinyin) ui.round(0xFF91DAC2.toInt(), 9) else ui.button("", active) {}.background
+            key.foreground?.setTint(if (temporaryPinyin) 0xFF10372B.toInt() else if (active) ui.palette.accentInk else ui.palette.ink)
         }
     }
 
@@ -617,6 +638,30 @@ class FansonInputMethodService : InputMethodService() {
             leaveClipboard(); panel = "keyboard"; render()
         }
     }
+
+    private fun toggleTemporaryPinyin() {
+        if (destroyed || !ready || !wubiKeyboard) return
+        vibrate()
+        rootCard?.dismiss(); languagePopup?.dismiss()
+        temporaryPinyin = !temporaryPinyin
+        val token = session.get()
+        currentCode = ""; candidateSnapshot = emptyList(); showingReadings = false; expanded = false
+        renderCandidates(); renderBody()
+        temporaryPinyinToast?.cancel()
+        temporaryPinyinToast = Toast.makeText(this, if (temporaryPinyin) "临时进入拼音输入" else "已退出临时拼音输入", Toast.LENGTH_SHORT).also { it.show() }
+        // Keep the session: earlier tasks may already contain body commits. The
+        // FIFO barrier clears only preedit, before subsequent keys use the new engine.
+        worker.execute {
+            if (destroyed || token != session.get()) return@execute
+            engine?.reset(); pinyinEngine?.reset()
+            main.post {
+                if (!destroyed && token == session.get()) {
+                    currentCode = ""; candidateSnapshot = emptyList(); showingReadings = false; expanded = false
+                    renderCandidates(); renderBody()
+                }
+            }
+        }
+    }
     private fun shift() {
         vibrate()
         languagePopup?.dismiss()
@@ -625,6 +670,7 @@ class FansonInputMethodService : InputMethodService() {
         } else if (chinese) {
             enqueue({ if (it is WubiEngine) it.enter(WubiEnterAction.COMMIT_CODE) else it.enter() }, after = {
                 languagePreferences.recordSelection(language, InputLanguage.ENGLISH)
+                temporaryPinyin = false
                 language = InputLanguage.ENGLISH; englishCase.reset(locked = true)
                 resetEnglishPosition()
                 render()
@@ -655,7 +701,7 @@ class FansonInputMethodService : InputMethodService() {
     private fun renderKeyboard(container: LinearLayout) {
         pronunciationKey = null
         val rootHints = mapOf('q' to "金", 'w' to "人", 'e' to "月", 'r' to "白", 't' to "禾", 'y' to "言", 'u' to "立", 'i' to "水", 'o' to "火", 'p' to "之", 'a' to "工", 's' to "木", 'd' to "大", 'f' to "土", 'g' to "王", 'h' to "目", 'j' to "日", 'k' to "口", 'l' to "田", 'x' to "纟", 'c' to "又", 'v' to "女", 'b' to "子", 'n' to "已", 'm' to "山")
-        val showRoots = chinese && showRootHints && !password
+        val showRoots = wubiKeyboard && showRootHints && !password
         if (showNumberRow) {
             val numberRow = ui.row().apply { contentDescription = "数字行" }
             "1234567890".forEach { digit ->
@@ -684,17 +730,22 @@ class FansonInputMethodService : InputMethodService() {
             chars.forEach { char ->
                 val label = if (korean) KoreanEngine.keyLabel(if (koreanShift) char.uppercaseChar() else char).toString()
                     else if (chinese || (english && englishCase.uppercase)) char.uppercase() else char.toString()
-                val key = if (chinese && char == 'z') ui.iconButton(R.drawable.ic_pronunciation_lookup, "Z / 查读音", showingReadings) {
+                val key = if (wubiKeyboard && char == 'z') ui.iconButton(R.drawable.ic_pronunciation_lookup, "Z / 查读音", showingReadings) {
                     letter('z')
                 }.also { pronunciationKey = it }
-                else if (english && char == 'l') ui.cornerHintButton(label, "'") { value ->
+                else if ((english || language == InputLanguage.PINYIN) && char == 'l') ui.cornerHintButton(label, "'") { value ->
                     if (value == "'") punct(value) else letter(char)
                 }
                 else ui.button(label + if (showRoots && rootHints[char] != null) "\n${rootHints[char]}" else "") { letter(char) }
                 key.textSize = if (showRoots) 14f else 20f
                 key.tag = char.toString()
-                if (!chinese || char != 'z') key.contentDescription = if (korean) label else char.toString()
-                if (showRoots && char in 'a'..'y') key.setOnLongClickListener {
+                if (!wubiKeyboard || char != 'z') key.contentDescription = if (korean) label else char.toString()
+                if (wubiKeyboard && char == 'z') key.setOnLongClickListener { toggleTemporaryPinyin(); true }
+                else if (pinyin && char == 'l') {
+                    key.stateDescription = "长按输入'"
+                    key.setOnLongClickListener { punct("'"); true }
+                }
+                else if (showRoots && char in 'a'..'y') key.setOnLongClickListener {
                     vibrate()
                     (rootCard ?: WubiRootCard(ui).also { rootCard = it }).show(key, char)
                     true
@@ -826,7 +877,7 @@ class FansonInputMethodService : InputMethodService() {
         val repo = emoji ?: return
         val header = ui.row()
         ui.addWeighted(header, ui.button("‹ 键盘") { switchPanel("emoji") }.apply { textSize = 12f }, 1f, 40)
-        if (chinese) ui.addWeighted(header, ui.button(if (emojiSearching) "关键词：${emojiQuery.ifEmpty { "输入中文" }}" else "五笔搜索 emoji") {
+        if (chinese) ui.addWeighted(header, ui.button(if (emojiSearching) "关键词：${emojiQuery.ifEmpty { "输入中文" }}" else if (pinyin) "拼音搜索 emoji" else "五笔搜索 emoji") {
             resolveThen { emojiSearching = !emojiSearching; renderBody(); renderCandidates() }
         }.apply { textSize = 13f }, 3f, 40)
         if (emojiQuery.isNotEmpty()) ui.addWeighted(header, ui.button("清空") { resolveThen { emojiQuery = ""; emojiPage = 0; renderBody() } }.apply { textSize = 12f }, 1f, 40)
@@ -882,7 +933,7 @@ class FansonInputMethodService : InputMethodService() {
         // emoji is inserted into the host editor.
         val token = session.get()
         worker.execute {
-            engine?.reset()
+            engine?.reset(); pinyinEngine?.reset()
             main.post {
                 if (token != session.get() || destroyed) return@post
                 if (commitText(item.text) && !privateField) store.recordEmojiUsage(item.text)
@@ -1020,7 +1071,7 @@ class FansonInputMethodService : InputMethodService() {
         // The platform's onDestroy invokes onFinishInput. Keep the worker open
         // until those callbacks have finished, and reject further UI work.
         super.onDestroy()
-        worker.execute { repository?.close(); pronunciation?.close(); store.close() }
+        worker.execute { repository?.close(); pinyinRepository?.close(); pronunciation?.close(); store.close() }
         worker.shutdown()
         main.removeCallbacksAndMessages(null)
     }

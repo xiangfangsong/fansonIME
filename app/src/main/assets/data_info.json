@@ -8,7 +8,9 @@
     "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6",
     "riku-ri/wubi-kb": "c65590f6a524fa7cb9459d2095be87d22bd839fc",
     "mozillazg/pinyin-data": "fe29ad32bdf352b31a02b9936e537f575432e9a6",
-    "mozillazg/phrase-pinyin-data": "4afa3226ce53c9138b939e83c3bb294dbe0da511"
+    "mozillazg/phrase-pinyin-data": "4afa3226ce53c9138b939e83c3bb294dbe0da511",
+    "amzxyz/rime-wanxiang-data": "78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c",
+    "thunlp/THUOCL": "a30ce79d895d01ab5132a5c74c29703ff7efb4cc"
   },
   "assets": {
     "wubi86.db": "a42d340cb0e456ba96a348606778da443743abee13b536f80cd19af827925894",
@@ -17,7 +19,8 @@
     "english.txt": "b4944ce250fb8e217308cb12cd840be1d519b437d08e2482cfa7989c80de532d",
     "fonts/fanson_wubi_roots.ttf": "388952c039e15dcc57e807c08110e2276c62de798bc0dca8c57362e68784276a",
     "wubi_roots.json": "535d19f37bd135d3f01b3a3108dcc350557fc49221aa32356187e5897657aff1",
-    "pronunciation.db": "73d9fe3744b72d96e23838c4189f6a014afb1fbf7ae3544cd8f17416ae4d622c"
+    "pronunciation.db": "73d9fe3744b72d96e23838c4189f6a014afb1fbf7ae3544cd8f17416ae4d622c",
+    "pinyin.db": "93b742f7b2d43c92cb40ec3a3aab315a8126795b4598cccc905932b49f4fdefd"
   },
   "traditional_mappings": 53076,
   "english_words": 46717,
@@ -38,5 +41,20 @@
       "D": 0,
       "E": 0
     }
+  },
+  "pinyin": {
+    "entries": 324206,
+    "characters": 43328,
+    "words": 250038,
+    "raw_valid_rows": {
+      "zi.dict.yaml": 51050,
+      "jichu.dict.yaml.gz": 1537808
+    },
+    "thuocl_supplemented_words": 38,
+    "canonical_entries": 299392,
+    "spelling_alias_entries": 24814,
+    "word_entry_limit": 250000,
+    "max_word_characters": 8,
+    "completion_rows": 64895
   }
 }

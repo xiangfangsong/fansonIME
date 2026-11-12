@@ -9,7 +9,7 @@ flowchart TD
     Android[Android 输入法框架] --> Service[FansonInputMethodService]
     Service --> Policy[EditorPolicy]
     Service --> Views[keyboard 原生 View 组件]
-    Service --> Engines[InputEngine 与三种引擎]
+    Service --> Engines[InputEngine 与四种引擎]
     Engines --> Contracts[Lexicon / PronunciationLexicon]
     WubiRepo[WubiRepository] -. 实现 .-> Contracts
     ReadingRepo[PronunciationRepository] -. 实现 .-> Contracts
@@ -43,7 +43,7 @@ flowchart TD
 2. 解析 `traditional.tsv` 创建 `TraditionalConverter`。
 3. 准备 `PronunciationRepository`，创建 `WubiEngine`。
 4. 额外尝试取得进程共享 WubiFrequencyStore，加载至多两万条个人词频并注入五笔引擎；此步骤失败单独回退固定排序，不阻止普通五笔输入。
-5. 读取 `english.txt` 创建英文词表与引擎。
+5. 准备只读 `PinyinRepository` 和 `PinyinEngine`，复用简繁转换；随后读取 `english.txt` 创建英文词表与引擎。
 6. 读取 `emoji.json` 创建 `EmojiRepository`。
 7. 切回主线程，未销毁时设 `ready=true` 并重绘。
 
@@ -55,7 +55,7 @@ flowchart TD
 
 | 对象或操作 | 执行位置 | 原因与限制 |
 | --- | --- | --- |
-| `WubiEngine`、五笔 SQL、读音查询及 LRU | worker 单线程 | 可变引擎和 SQLite 查询串行，避免主线程执行五笔检索 |
+| `WubiEngine`、`PinyinEngine`、两种中文 SQL、读音查询及 LRU | worker 单线程 | 可变引擎和 SQLite 查询串行，避免主线程执行中文检索 |
 | 简繁映射、英文词表、emoji JSON 初次加载 | worker | 统一初始化；成功后再允许输入 |
 | `EnglishEngine` | worker 创建，之后主线程使用 | 英文预编辑状态与 composing 编辑同步，避免迟到光标回调打断新单词 |
 | `EnglishCapitalization` / `EnglishEditorPosition` | 服务主线程持有 | 句首/持续大写状态和预测光标；宿主句首查询及实际编辑仍经服务现有链路，见 [英语维护说明](ENGLISH_INPUT.md) |
@@ -94,7 +94,7 @@ flowchart TD
 | 原生 View、程序化布局 | `Ui` 提供基础样式；大部分刷新通过移除和重建子 View；当前没有 RecyclerView 候选列表 |
 | 预生成只读 SQLite 字典 | 手机端不解析 YAML；资源生成独立于普通 Gradle 编译 |
 | 小型 SQLite 保存个人数据 | `personal.db` 位于 `noBackupFilesDir`；新字段需要明确迁移与默认值策略 |
-| 三种语言不同执行线程 | 优先保持编辑正确性；统一调度前必须验证连续输入和光标时序 |
+| 四种语言按宿主编辑语义保留执行线程 | 优先保持编辑正确性；统一调度前必须验证连续输入和光标时序 |
 | 会话令牌＋FIFO 输入队列 | 拒绝跨会话任务；同会话按键结果依序发布，没有独立查询序号，也不丢弃中间提交结果 |
 
 词频组件持有应用级 LocalStore 和模型，不随单个 IME 服务销毁关闭；不存在销毁兜底写盘，未保存词频允许随进程退出丢失。SQLite 增量迁移到 2，启用 WAL，但不将实例同步误认为跨连接业务锁。并发快照与清空的完整契约见 [词频维护说明](WUBI_FREQUENCY.md)。

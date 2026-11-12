@@ -1,6 +1,8 @@
 # 开发与验证
 
-基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.4.2 验证记录](../validation/VALIDATION-0.4.2.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。
+0.5.0 新增 `PinyinEngineTest`（合成词典的拼音、分隔符、清码、无匹配、回车、简繁）与仪器测试 `checkPinyinUi`（实际离线数据、Z 真实触摸与队列屏障、生命周期、搜索、偏好、字根及主题）。可用 `tools/test_emulator.ps1 -Serial emulator-5580 -Focus pinyin` 专项验证；完整回归省略 Focus。资源脚本增加拼音数据库、压缩源原始哈希及许可检查，离线重建 `python tools/prepare_pinyin_data.py`；当次结果见 [0.5.0](../validation/VALIDATION-0.5.0.md)。
+
+基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.5.0 验证记录](../validation/VALIDATION-0.5.0.md)，此前 0.4.2 见 [历史记录](../validation/VALIDATION-0.4.2.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。
 
 ## 构建环境与命令
 
@@ -56,7 +58,7 @@ python tools\verify_assets.py
 
 ## 测试分层与源码入口
 
-当前有 14 个 JVM 测试文件、144 个 `@Test`；这是源码清点，执行状态以实际报告为准。
+当前有 15 个 JVM 测试文件、153 个 `@Test`；这是源码清点，执行状态以实际报告为准。
 
 | 层次/文件 | 验证内容 | 不能代替的验证 |
 | --- | --- | --- |

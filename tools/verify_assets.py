@@ -1,5 +1,6 @@
 """Offline integrity and privacy checks. Does not contact any connected phone."""
 import hashlib
+import gzip
 import json
 import sqlite3
 import xml.etree.ElementTree as ET
@@ -32,7 +33,23 @@ assert readings('𠮟') == ['chì']
 readings_db.close()
 lock = json.loads((ROOT / 'resources.lock.json').read_text(encoding='utf-8'))
 for name, entry in lock['sources'].items():
-    assert hashlib.sha256((ROOT / 'third_party' / name).read_bytes()).hexdigest() == entry['sha256'], name
+    data = (ROOT / 'third_party' / name).read_bytes()
+    assert hashlib.sha256(data).hexdigest() == entry['sha256'], name
+    if entry.get('compression') == 'gzip':
+        assert hashlib.sha256(gzip.decompress(data)).hexdigest() == entry['original_sha256'], name
+with sqlite3.connect(f"file:{(ASSETS / 'pinyin.db').as_posix()}?mode=ro", uri=True) as pinyin:
+    assert pinyin.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+    assert pinyin.execute('SELECT count(*) FROM entries').fetchone()[0] == info['pinyin']['entries']
+    assert pinyin.execute('SELECT count(DISTINCT text) FROM entries WHERE length(text)=1').fetchone()[0] == info['pinyin']['characters']
+    assert pinyin.execute('SELECT count(*) FROM completions').fetchone()[0] == info['pinyin']['completion_rows']
+    for code, text in {'ni': '你', 'weixin': '微信', 'zhifubao': '支付宝', 'xiaochengxu': '小程序', 'erweima': '二维码', 'nver': '女儿'}.items():
+        assert pinyin.execute('SELECT text FROM entries WHERE code=? ORDER BY weight DESC,text,syllables LIMIT 1', (code,)).fetchone()[0] == text, code
+    assert pinyin.execute("SELECT count(DISTINCT text) FROM entries WHERE source='thuocl'").fetchone()[0] == info['pinyin']['thuocl_supplemented_words']
+    assert info['pinyin']['canonical_entries'] + info['pinyin']['spelling_alias_entries'] == info['pinyin']['entries']
+    assert not pinyin.execute("SELECT 1 FROM entries WHERE code GLOB '*[^a-z]*' OR length(text)>8 LIMIT 1").fetchall()
+for source_name, packaged in [('wanxiang/LICENSE', 'PINYIN-CC-BY-4.0.txt'), ('wanxiang/LICENSE-SCOPE.md', 'PINYIN-LICENSE-SCOPE.md'),
+                              ('wanxiang/NOTICE.md', 'PINYIN-UPSTREAM-NOTICE.md'), ('thuocl/LICENSE', 'THUOCL-MIT.txt'), ('NOTICE.txt', 'PINYIN-NOTICE.txt')]:
+    assert (ROOT / 'third_party/pinyin' / source_name).read_bytes() == (ASSETS / 'licenses' / packaged).read_bytes(), packaged
 words = (ASSETS / 'english.txt').read_text(encoding='utf-8').splitlines()
 roots = json.loads((ASSETS / 'wubi_roots.json').read_text(encoding='utf-8'))
 assert set(roots['keys']) == set('abcdefghijklmnopqrstuvwxy')
@@ -74,4 +91,4 @@ for service in manifest.findall("application/service"):
 for mode in ET.parse(ROOT / "app/src/main/res/xml/data_extraction_rules.xml").getroot():
     domains = {node.attrib["domain"] for node in mode.findall("exclude")}
     assert {"root", "file", "database", "sharedpref", "external", "device_root", "device_file", "device_database", "device_sharedpref"} <= domains
-print(f"PASS: {info['wubi_entries']} Wubi entries; 25 abbreviated-code preferences; {len(emoji)} emoji sequences; checksums; privacy manifest; backup exclusions")
+print(f"PASS: {info['wubi_entries']} Wubi entries; {info['pinyin']['entries']} Pinyin index entries; 25 abbreviated-code preferences; {len(emoji)} emoji sequences; checksums; licenses; privacy manifest; backup exclusions")

@@ -4,6 +4,7 @@ package com.fanson.ime.engine
 enum class InputLanguage(val value: String, val label: String) {
     ENGLISH("english", "English"),
     WUBI("wubi86", "五笔86"),
+    PINYIN("pinyin", "全拼26键"),
     KOREAN("korean", "한국어");
 
     companion object {

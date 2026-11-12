@@ -1,4 +1,4 @@
-param([string]$Serial = 'emulator-5580', [ValidateSet('all', 'keyboard_shortcuts')][string]$Focus = 'all')
+param([string]$Serial = 'emulator-5580', [ValidateSet('all', 'keyboard_shortcuts', 'pinyin')][string]$Focus = 'all')
 $ErrorActionPreference = 'Stop'
 # Never use a physical phone, and never pick a device implicitly.
 if ($Serial -notmatch '^emulator-\d+$') { throw 'This smoke test is restricted to emulators.' }

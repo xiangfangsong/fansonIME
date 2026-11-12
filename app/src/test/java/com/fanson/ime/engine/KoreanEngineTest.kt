@@ -109,7 +109,7 @@ class KoreanEngineTest {
         assertEquals("ㄱ", e.letter('r').composing)
     }
     @Test fun languageOrderAndStoredValuesAreStable() {
-        assertEquals(listOf("English", "五笔86", "한국어"), InputLanguage.entries.map { it.label })
+        assertEquals(listOf("English", "五笔86", "全拼26键", "한국어"), InputLanguage.entries.map { it.label })
         assertEquals(InputLanguage.WUBI, InputLanguage.fromPreference(""))
         assertEquals(InputLanguage.WUBI, InputLanguage.fromPreference("invalid"))
         for (language in InputLanguage.entries) assertEquals(language, InputLanguage.fromPreference(language.value))

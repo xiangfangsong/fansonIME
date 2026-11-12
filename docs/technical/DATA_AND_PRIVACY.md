@@ -1,5 +1,7 @@
 # 数据与隐私
 
+0.5.0 增加只读 `pinyin.db`，没有个人库迁移、拼音学习、权限或新依赖；临时拼音标志只存内存。来源版本、CC BY 4.0/MIT 边界、数据库结构及离线重建见 [拼音数据说明](PINYIN_INPUT.md#数据索引和重建)，APK 内保留署名、许可及修改说明。五笔原始词库和哈希不改。
+
 基线见 [入口](README.md)。数据实现主要位于 [`LocalStore.kt`](../../app/src/main/java/com/fanson/ime/data/LocalStore.kt)、[`PronunciationRepository.kt`](../../app/src/main/java/com/fanson/ime/data/PronunciationRepository.kt) 与 [`tools/`](../../tools)。
 
 ## 存储分层与资源准备
@@ -11,9 +13,9 @@
 | 随 APK 分发的产物 | [`app/src/main/assets/`](../../app/src/main/assets) | SQLite、JSON、TSV、词表、字根字体及许可文件 |
 | 产物元数据 | [`data_info.json`](../../app/src/main/assets/data_info.json) | 产物哈希、数量及 revision；运行时用其中哈希准备 SQLite 副本 |
 | 用户数据 | `context.noBackupFilesDir/personal.db` | 可写 SQLite，保存设置、手动短语、五笔衰减词频、emoji 次数、剪贴板历史 |
-| 字典运行副本 | `noBackupFilesDir/wubi-<哈希前12位>.db`、`pronunciation-<哈希前12位>.db` | 只读打开，由 assets 复制而来，与个人数据分开 |
+| 字典运行副本 | `noBackupFilesDir/wubi-<哈希前12位>.db`、`pronunciation-<哈希前12位>.db`、`pinyin-<哈希前12位>.db` | 只读打开，由 assets 复制而来，与个人数据分开 |
 
-两个字典仓库都在目标文件不存在时：复制到固定临时文件 → 计算完整 SHA-256 → 与元数据比对 → rename 为带哈希文件名 → 只读打开。已有目标文件会直接打开，目前不重新计算其哈希；也没有自动清除旧哈希副本或损坏副本自愈。
+三个字典仓库都在目标文件不存在时：复制到固定临时文件 → 计算完整 SHA-256 → 与元数据比对 → rename 为带哈希文件名 → 只读打开。已有目标文件会直接打开，目前不重新计算其哈希；也没有自动清除旧哈希副本或损坏副本自愈。
 
 这些校验用于资源一致性，不是密码学意义上的独立信任来源：assets 和元数据同包分发。不要通过手改哈希绕过数据错误。
 
@@ -120,6 +122,7 @@ python tools\verify_assets.py
 | `prepare_data.py` | Rime、Unicode/CLDR → 五笔 SQLite、emoji JSON、基础许可和元数据 | 锁文件与所有源文件齐全时离线；缺源文件会尝试下载，锁文件缺失会选择 revision 并下载。它不是无条件离线脚本 |
 | `prepare_completion_data.py` | OpenCC、FrequencyWords → 简繁 TSV、英文词表、许可、元数据 | 默认仅本地；显式 `--fetch` 才下载缺失源并可登记缺失的锁记录 |
 | `prepare_pronunciation_data.py` | 固定读音源＋已生成的简繁 TSV、五笔库 → 读音 SQLite、覆盖审计、许可和元数据 | 不联网；依赖前两步产物；输出审计到 `third_party/pronunciation/coverage.json` |
+| `prepare_pinyin_data.py` | 固定万象字词＋THUOCL IT＋已有整词读音 → 拼音 SQLite、覆盖审计、许可和元数据 | 不联网；gzip 解压前后哈希都校验，保留源数据；不改变五笔资源 |
 | `prepare_root_data.py` | 原始字根键位＋本地四键校正＋指定的原始字体 → 字体子集、字根 JSON、许可、元数据 | 仅需要重建字根字体时执行；要求 `fonttools==4.55.8` 与 `--source-font`，校验原字体哈希，不自动下载 |
 | `verify_root_font.py` | 固定原始字体＋已生成字体 → 字形覆盖、现有轮廓/字宽、P 专用形态检查 | 重建后执行；同样要求 FontTools 和 `--source-font`，普通构建不依赖 FontTools |
 | `verify_assets.py` | 锁记录、原始文件、全部产物、Manifest、迁移排除 XML | 只读检查，不连接设备、不联网；不证明最终 APK 或实际运行表现 |

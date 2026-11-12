@@ -39,8 +39,10 @@ import java.io.File
 class SmokeInstrumentation : Instrumentation() {
     private val passed = mutableListOf<String>()
     private var shortcutsOnly = false
+    private var pinyinOnly = false
     override fun onCreate(arguments: Bundle?) {
         shortcutsOnly = arguments?.getString("focus") == "keyboard_shortcuts"
+        pinyinOnly = arguments?.getString("focus") == "pinyin"
         super.onCreate(arguments); start()
     }
     override fun onStart() {
@@ -324,6 +326,12 @@ class SmokeInstrumentation : Instrumentation() {
                     if (shown) check((0 until rows.single().childCount).map { (rows.single().getChildAt(it) as Button).text.toString() } == "1234567890".map { it.toString() })
                 }
             }
+            if (pinyinOnly) {
+                checkPinyinUi(editor, ::refreshKeyboard)
+                finish(Activity.RESULT_OK, Bundle().apply { putString("passed", passed.joinToString(",")); putInt("count", passed.size) })
+                return
+            }
+            checkPinyinUi(editor, ::refreshKeyboard)
             if (shortcutsOnly) {
                 setToggle("英语句首自动大写", false)
                 checkKeyboardShortcuts(activity, editor, ::refreshKeyboard)
@@ -338,8 +346,8 @@ class SmokeInstrumentation : Instrumentation() {
             runOnMainSync {
                 val menu = windows().filterIsInstance<android.widget.LinearLayout>().first { visible(it) && it.contentDescription == "输入语言列表" }
                 val items = (0 until menu.childCount).map { menu.getChildAt(it) as Button }
-                check(items.map { it.text.toString() } == listOf("English", "五笔86", "한국어"))
-                check(items.map { it.isSelected } == listOf(false, true, false))
+                check(items.map { it.text.toString() } == listOf("English", "五笔86", "全拼26键", "한국어"))
+                check(items.map { it.isSelected } == listOf(false, true, false, false))
             }
             screenshot("31-language-selector")
             screenshot("40-language-menu-0.3.2")
@@ -529,7 +537,7 @@ class SmokeInstrumentation : Instrumentation() {
             runOnMainSync { editor.setText("") }; refreshKeyboard()
             val defaultLanguageSpinner = allViews(activity.window.decorView).filterIsInstance<android.widget.Spinner>().first { it.contentDescription == "默认语言" }
             runOnMainSync {
-                check((0 until defaultLanguageSpinner.count).map { defaultLanguageSpinner.getItemAtPosition(it).toString() } == listOf("English", "五笔86", "한국어"))
+                check((0 until defaultLanguageSpinner.count).map { defaultLanguageSpinner.getItemAtPosition(it).toString() } == listOf("English", "五笔86", "全拼26键", "한국어"))
                 check(defaultLanguageSpinner.selectedItemPosition == InputLanguage.entries.indexOf(InputLanguage.WUBI))
                 defaultLanguageSpinner.setSelection(InputLanguage.entries.indexOf(InputLanguage.KOREAN))
             }
@@ -837,10 +845,10 @@ class SmokeInstrumentation : Instrumentation() {
             setToggle("显示顶部数字行", false) // Existing !/? regressions explicitly exercise the hidden-row mode.
             InputLanguage.entries.forEach { language ->
                 chooseLanguage(language)
-                val comma = if (language == InputLanguage.WUBI) "，" else ","
-                val period = if (language == InputLanguage.WUBI) "。" else "."
-                val exclamation = if (language == InputLanguage.WUBI) "！" else "!"
-                val question = if (language == InputLanguage.WUBI) "？" else "?"
+                val comma = if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "，" else ","
+                val period = if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "。" else "."
+                val exclamation = if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "！" else "!"
+                val question = if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "？" else "?"
                 runOnMainSync { editor.setText("") }
                 await {
                     var correct = false
@@ -864,6 +872,7 @@ class SmokeInstrumentation : Instrumentation() {
                 longPress(period); await { editor.text.toString() == comma + period + exclamation + question }
                 screenshot(when (language) {
                     InputLanguage.WUBI -> "36-punctuation-long-press-0.3.1"
+                    InputLanguage.PINYIN -> "56-pinyin-punctuation-0.5.0"
                     InputLanguage.ENGLISH -> "37-english-punctuation-0.3.1"
                     InputLanguage.KOREAN -> "38-korean-punctuation-0.3.1"
                 })
@@ -1330,6 +1339,148 @@ class SmokeInstrumentation : Instrumentation() {
         }
     }
     private fun allViews(view: View): List<View> = listOf(view) + if (view is ViewGroup) (0 until view.childCount).flatMap { allViews(view.getChildAt(it)) } else emptyList()
+    private fun checkPinyinUi(editor: EditText, refresh: () -> Unit) {
+        com.fanson.ime.data.PinyinRepository(targetContext).use { lexicon ->
+            check(lexicon.lookup("weixin").first().text == "微信")
+            check(lexicon.lookup("zhifubao").first().text == "支付宝")
+            check(lexicon.lookup("xiaochengxu").any { it.text == "小程序" })
+            check(lexicon.lookup("erweima").any { it.text == "二维码" })
+            check(lexicon.lookup("lv").any { it.text == "绿" })
+            check(lexicon.lookup("lve").any { it.text == "略" })
+            check(lexicon.lookup("lue").any { it.text == "略" })
+            for (code in listOf("nver", "nv'er")) check(lexicon.lookup(code).first().text == "女儿")
+            for (code in listOf("nueren", "nveren")) check(lexicon.lookup(code).any { it.text == "虐人" })
+            check(lexicon.lookup("xi'an").any { it.text == "西安" })
+            check(lexicon.lookup("xi'an").none { it.text == "先" })
+            check(lexicon.lookup("zzzz").isEmpty())
+            check(lexicon.lookup("ni").indexOfFirst { it.text == "你" } == 0)
+            val times = List(120) { index ->
+                val start = System.nanoTime()
+                lexicon.lookup(listOf("s", "sh", "shi", "shij", "ni", "nihao", "weixin", "xi'an")[index % 8])
+                (System.nanoTime() - start) / 1_000_000.0
+            }.sorted()
+            File(targetContext.externalCacheDir, "qa").apply { mkdirs() }.resolve("pinyin-query-0.5.0.json")
+                .writeText("{\"samples\":120,\"p50_ms\":${times[60]},\"p95_ms\":${times[114]},\"max_ms\":${times.last()}}")
+        }
+        passed += "pinyin_offline_modern_words_umlaut_apostrophe_no_match_and_query_timing"
+        val learningSize = com.fanson.ime.data.WubiFrequencyStore.get(targetContext).model.size
+        fun type(code: String) = runOnMainSync { code.forEach { findKeyboardButton(it).performClick() } }
+        fun clear() { runOnMainSync { editor.setText("") }; refresh() }
+        fun temporary(): Boolean = findButton("Z / 查读音")?.stateDescription?.startsWith("临时拼音已开启") == true
+        LocalStore(targetContext).use {
+            val preferences = LanguagePreferences(it)
+            preferences.setDefaultLanguage(InputLanguage.PINYIN)
+            check(preferences.preferredLanguage == InputLanguage.PINYIN)
+            check(preferences.quickSwitchTarget(InputLanguage.ENGLISH) == InputLanguage.PINYIN)
+        }
+        refresh(); await { findButton("␣ 全拼26键") != null }
+        click("切换语言"); await { findButton("␣ English") != null }
+        click("切换语言"); await { findButton("␣ 全拼26键") != null }
+        passed += "pinyin_default_language_preference_and_globe_quick_return_ui"
+        chooseLanguage(InputLanguage.PINYIN); clear()
+        type("weixin"); await { findText("拼音：weixin") != null && findButton("微信") != null }
+        check(editor.text.isEmpty()); screenshot("57-pinyin-modern-word-0.5.0")
+        click("微信"); type("zhifubao"); await { findText("拼音：zhifubao") != null }
+        click("空格"); await { editor.text.toString() == "微信支付宝" }
+        passed += "pinyin_permanent_language_full_word_selection_and_space_ui"
+        type("zzzz"); await { findText("拼音：zzzz") != null }
+        click("空格"); click("，"); await { findText("拼音：zzzz") != null }
+        check(editor.text.toString() == "微信支付宝")
+        longPress("切换语言"); click("한국어")
+        await { findText("拼音：zzzz") != null }; check(findButton("␣ 全拼26键") != null)
+        click("换行"); await { editor.text.toString() == "微信支付宝zzzz" }
+        type("niz"); await { findText("拼音：niz") != null }
+        click("退格"); await { findButton("你") != null }; click("你")
+        await { editor.text.toString() == "微信支付宝zzzz你" }
+        passed += "pinyin_no_match_protects_punctuation_and_language_switch_enter_raw_and_backspace_ui"
+        clear(); type("xi"); await { findText("拼音：xi") != null }
+        longPress("l"); type("an"); await { findButton("西安") != null }
+        click("西安"); await { editor.text.toString() == "西安" }
+        passed += "pinyin_real_l_long_press_syllable_separator_ui"
+        clear(); type("nver"); await { findButton("女儿") != null }; click("女儿")
+        type("nveren"); await { findButton("虐人") != null }; click("虐人")
+        await { editor.text.toString() == "女儿虐人" }
+        passed += "pinyin_syllable_spelling_aliases_preserve_nver_and_nveren_words_ui"
+        clear(); type("ni"); await { findButton("你") != null }
+        chooseLanguage(InputLanguage.WUBI); await { editor.text.toString() == "你" }
+        clear(); type("a"); await { findText("编码：a") != null }
+        longPress("Z / 查读音"); await { temporary() && findText("编码：a") == null }
+        check(editor.text.isEmpty() && findButton("␣ 五笔86") != null)
+        screenshot("58-wubi-temporary-pinyin-0.5.0")
+        type("nihao"); await { findButton("你好") != null }; click("你好")
+        await { editor.text.toString() == "你好" && temporary() }
+        type("zhifubao"); await { findButton("支付宝") != null }; click("支付宝")
+        await { editor.text.toString() == "你好支付宝" && temporary() }
+        passed += "temporary_pinyin_real_z_toggle_discards_code_preserves_wubi_layout_and_survives_selection_ui"
+        type("zzzz"); await { findText("拼音：zzzz") != null }
+        longPress("Z / 查读音"); await { !temporary() && findText("拼音：zzzz") == null }
+        check(editor.text.toString() == "你好支付宝")
+        type("z"); await { findText("编码：z") != null }
+        click("退格"); await { findText("编码：z") == null }
+        passed += "temporary_pinyin_exit_discards_no_match_and_restores_wubi_z_reading_key_ui"
+        longPress("Z / 查读音"); await { temporary() }
+        type("z"); await { findText("拼音：z") != null }
+        refresh(); await { !temporary() && findText("拼音：z") == null }
+        longPress("Z / 查读音"); await { temporary() }
+        chooseLanguage(InputLanguage.ENGLISH); chooseLanguage(InputLanguage.WUBI)
+        check(!temporary())
+        LocalStore(targetContext).use { check(it.get("input_language", "") == "wubi86") }
+        passed += "temporary_pinyin_literal_z_hide_and_language_change_reset_without_persisting_mode_ui"
+        clear(); longPress("Z / 查读音"); await { temporary() }
+        click("表情"); await { findButton("拼音搜索 emoji") != null }; click("拼音搜索 emoji")
+        type("weixiao"); await { findButton("微笑") != null }; click("微笑")
+        await { findButton("关键词：微笑") != null }
+        check(editor.text.isEmpty())
+        type("ni"); await { findText("搜索编码：ni") != null }
+        longPress("Z / 查读音"); await { !temporary() && findText("搜索编码：ni") == null }
+        check(findButton("关键词：微笑") != null && editor.text.isEmpty())
+        click("‹ 键盘"); await { findButton("␣ 五笔86") != null }
+        passed += "temporary_pinyin_emoji_query_isolation_and_toggle_preserves_confirmed_search_ui"
+        check(com.fanson.ime.data.WubiFrequencyStore.get(targetContext).model.size == learningSize)
+        passed += "permanent_and_temporary_pinyin_never_add_wubi_learning_ui"
+        // Queue a known fifth-code commit, a mode barrier and a Pinyin word in
+        // one main-thread burst. Dropping stale UI must never drop body commits.
+        LocalStore(targetContext).use { it.put("auto_unique", "false"); it.put("fifth_commit", "true"); it.addPhrase("aaaa", "合成队列") }
+        clear()
+        runOnMainSync {
+            "aaaab".forEach { findKeyboardButton(it).performClick() }
+            check(findKeyboardButton('z').performLongClick())
+            "nihao".forEach { findKeyboardButton(it).performClick() }
+        }
+        await { editor.text.toString() == "合成队列" && findButton("你好") != null && temporary() }
+        click("你好"); await { editor.text.toString() == "合成队列你好" }
+        runOnMainSync { repeat(6) { check(findKeyboardButton('z').performLongClick()) } }
+        type("weixin"); await { findButton("微信") != null }; click("微信")
+        await { editor.text.toString() == "合成队列你好微信" && temporary() }
+        passed += "temporary_pinyin_fifo_switch_preserves_pending_body_commit_and_rapid_toggles_ui"
+        for (theme in listOf("light", "dark")) {
+            LocalStore(targetContext).use { it.put("roots", "true"); it.put("number_row", "false"); it.put("theme", theme) }
+            clear()
+            val rootLabel = findButton("q")!!.text.toString()
+            check(rootLabel.contains("金"))
+            longPress("Z / 查读音"); await { temporary() }
+            runOnMainSync {
+                check(findKeyboardButton('q').text.toString() == rootLabel)
+                check(findKeyboardButton('z').isSelected)
+                check(windows().none { visible(it) && it.contentDescription == "数字行" })
+            }
+            type("xi"); await { findText("拼音：xi") != null }
+            longPress("l"); type("an"); await { findButton("西安") != null }
+            screenshot("59-temporary-roots-$theme-0.5.0")
+            longPress("Z / 查读音"); await { !temporary() && findText("拼音：xi'an") == null }
+            check(editor.text.isEmpty())
+        }
+        passed += "temporary_pinyin_roots_number_row_hidden_both_themes_and_separator_ui"
+        LocalStore(targetContext).use {
+            it.removePhrase("aaaa", "合成队列"); it.put("auto_unique", "true")
+            it.put("roots", "false"); it.put("number_row", "true"); it.put("theme", "system")
+            LanguagePreferences(it).setDefaultLanguage(InputLanguage.WUBI)
+            it.put("input_language", "wubi86"); it.put("last_non_english_language", "")
+        }
+        clear()
+        WubiFrequencyChecks.edit(this) { it.clearFrequency() }
+    }
+
     private fun checkKeyboardShortcuts(activity: Activity, editor: EditText, refresh: () -> Unit) {
         LocalStore(targetContext).use { store ->
             // Catch the reported half-L regression at the minimum key height,
@@ -1381,7 +1532,7 @@ class SmokeInstrumentation : Instrumentation() {
                 runOnMainSync {
                     val row = windows().filterIsInstance<android.widget.LinearLayout>().first { visible(it) && it.contentDescription == "数字行" }
                     check((0 until row.childCount).map { (row.getChildAt(it) as Button).text.toString() }.joinToString("") == "1234567890")
-                    "1234567890".zip(if (language == InputLanguage.WUBI) "！@#$%^&*（）" else "!@#$%^&*()").forEach { (digit, symbol) ->
+                    "1234567890".zip(if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "！@#$%^&*（）" else "!@#$%^&*()").forEach { (digit, symbol) ->
                         val key = findButtonOnMain(digit.toString())
                         check(key is com.fanson.ime.keyboard.CornerHintButton && key.cornerHint == symbol.toString())
                         check(key.stateDescription == "长按输入$symbol")
@@ -1391,24 +1542,25 @@ class SmokeInstrumentation : Instrumentation() {
                 await { editor.text.toString() == "1234567890" }
                 clear()
                 runOnMainSync { "1234567890".forEach { check(findButtonOnMain(it.toString()).performLongClick()) } }
-                await { editor.text.toString() == if (language == InputLanguage.WUBI) "！@#$%^&*（）" else "!@#$%^&*()" }
+                await { editor.text.toString() == if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "！@#$%^&*（）" else "!@#$%^&*()" }
             }
             passed += "all_languages_number_row_pc_mapping_short_digits_and_long_symbols_ui"
             for (language in InputLanguage.entries) {
                 chooseLanguage(language); clear()
-                val prefix = if (language == InputLanguage.WUBI) "！" else "!"
+                val prefix = if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "！" else "!"
                 longPress("1"); await { editor.text.toString() == prefix }
-                longPress("9"); await { editor.text.toString() == prefix + if (language == InputLanguage.WUBI) "（" else "(" }
-                longPress("0"); await { editor.text.toString() == prefix + if (language == InputLanguage.WUBI) "（）" else "()" }
+                longPress("9"); await { editor.text.toString() == prefix + if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "（" else "(" }
+                longPress("0"); await { editor.text.toString() == prefix + if (language == InputLanguage.WUBI || language == InputLanguage.PINYIN) "（）" else "()" }
             }
             passed += "all_languages_real_number_long_press_release_does_not_append_digit_ui"
             for ((language, keys, result) in listOf(
-                Triple(InputLanguage.WUBI, "a", "工@"), Triple(InputLanguage.ENGLISH, "app", "app@"), Triple(InputLanguage.KOREAN, "rk", "가@")
+                Triple(InputLanguage.WUBI, "a", "工@"), Triple(InputLanguage.PINYIN, "ni", "你@"), Triple(InputLanguage.ENGLISH, "app", "app@"), Triple(InputLanguage.KOREAN, "rk", "가@")
             )) {
                 chooseLanguage(language); clear()
                 runOnMainSync { keys.forEach { findKeyboardButton(it).performClick() } }
                 await { when (language) {
                     InputLanguage.WUBI -> findText("编码：a") != null
+                    InputLanguage.PINYIN -> findText("拼音：ni") != null
                     InputLanguage.ENGLISH -> findText("英文：app") != null
                     InputLanguage.KOREAN -> editor.text.toString() == "가"
                 } }
@@ -1419,7 +1571,7 @@ class SmokeInstrumentation : Instrumentation() {
                 row(enabled)
                 for (language in InputLanguage.entries) {
                     chooseLanguage(language); clear()
-                    val chinese = language == InputLanguage.WUBI
+                    val chinese = language == InputLanguage.WUBI || language == InputLanguage.PINYIN
                     val comma = if (chinese) "，" else ","
                     val period = if (chinese) "。" else "."
                     val colon = if (enabled) { if (chinese) "：" else ":" } else { if (chinese) "！" else "!" }

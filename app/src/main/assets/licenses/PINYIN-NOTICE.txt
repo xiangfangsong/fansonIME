@@ -1,0 +1,34 @@
+FansonIME 离线全拼数据及转换说明（2026-11-12）
+
+主词库：amzxyz/rime-wanxiang-data，作者 amzxyz 及上游贡献者。
+https://github.com/amzxyz/rime-wanxiang-data
+固定提交：78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c
+仅使用 dicts/zi.dict.yaml、dicts/jichu.dict.yaml 两份词典数据。
+原始词典及其转换后的数据库继续遵循 CC BY 4.0：
+https://creativecommons.org/licenses/by/4.0/
+完整许可及授权边界见 PINYIN-CC-BY-4.0.txt、PINYIN-LICENSE-SCOPE.md。
+保留上游 NOTICE 供查阅；其中列举的上游程序、模型及依赖未因此全部引入。
+本项目没有复制该上游的程序、转换脚本或模型，没有集成 librime。
+
+补充词表：清华大学自然语言处理实验室 thunlp/THUOCL。
+https://github.com/thunlp/THUOCL
+固定提交：a30ce79d895d01ab5132a5c74c29703ff7efb4cc
+仅使用 THUOCL_IT.txt，遵循 MIT，完整版权及许可见 THUOCL-MIT.txt。
+此资料的词表更新较早，不将其描述为最新词库。
+它不带拼音；只补充主词表缺失且 phrase-pinyin-data 已有整词读音的词。
+读音资料作者、固定版本与 MIT 许可见 PRONUNCIATION-NOTICE.txt、
+phrase-pinyin-data-MIT.txt，不按逐字多音字排列组合猜测读音。
+
+FansonIME 的修改：使用自行编写的 tools/prepare_pinyin_data.py 离线生成
+只读 SQLite；去除声调、ü 转为 v，按原始音节生成 lve/nve 及 j/q/x 的 v
+兼容拼写索引，避免误改“女儿”nver 等跨音节拼写。保留
+原始音节边界、原始字词和频重，重复项取最大频重。保留原始单字记录，
+词语限 2–8 字并按频重保留前 250,000 条，THUOCL 补词以保守权重 1 加入。
+生成全拼索引和有限前缀补全索引，不提供句子语言模型、简拼或联网查询。
+实际数量及来源审计见 third_party/pinyin/coverage.json 和 assets/data_info.json。
+同形异音词和生僻字覆盖依赖上游资料，资料不保证完整或没有错误。
+
+原始文件保存在 third_party/pinyin/，大词表以确定性 gzip 压缩保存，解压后
+与上游原始字节一致。来源 URL、提交及原始/保存字节 SHA-256 记录于
+resources.lock.json。重建方式：python tools/prepare_pinyin_data.py。
+本声明不改变第三方数据的许可；FansonIME 原创代码仍为 Apache-2.0。

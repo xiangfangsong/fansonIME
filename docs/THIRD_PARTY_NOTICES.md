@@ -12,6 +12,14 @@
 - 本项目的转换：读取原文件的数据段，保留 a-y 的 1～4 码记录；按编码与文本去重；保留词频与 stem；生成 SQLite 查询索引。原始源文件保持原样。
 - 原始数据、转换脚本和生成资源均保存在本项目，便于重建或替换码表。许可和作者说明同时随 APK 打包，并可从“关于”查看。
 
+## 离线全拼：万象数据与 THUOCL
+
+- 主库：[amzxyz/rime-wanxiang-data](https://github.com/amzxyz/rime-wanxiang-data)，固定 revision `78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c`，仅使用 `dicts/zi.dict.yaml`、`dicts/jichu.dict.yaml`。依上游 LICENSE-SCOPE，数据采用 **CC BY 4.0**；其程序未授权复用，本项目没有引入其程序/模型或 librime。
+- 原作者 amzxyz 与上游贡献者；保留 LICENSE、LICENSE-SCOPE、NOTICE 和源数据。大词表无损 gzip 保存，解压后原始字节哈希及固定 URL 记录于 `resources.lock.json`。
+- 补词：[清华大学自然语言处理实验室 THUOCL](https://github.com/thunlp/THUOCL)，固定 revision `a30ce79d895d01ab5132a5c74c29703ff7efb4cc`，仅使用 `THUOCL_IT.txt`，MIT。它不含读音，且数据较早；只补充现有 MIT phrase-pinyin-data 有整词读音的缺词，不猜测多音字排列。
+- 自行编写的 `tools/prepare_pinyin_data.py` 校验、规范拼音、保留单字和按原频重取前 250,000 条的词组，补入 38 条 IT 词，生成只读数据库及前缀索引。修改说明见 [`third_party/pinyin/NOTICE.txt`](../third_party/pinyin/NOTICE.txt)，覆盖审计见 `third_party/pinyin/coverage.json`。派生词典继续遵循各自许可，不因项目代码 Apache-2.0 改授权。
+- APK 同时提供 `PINYIN-NOTICE.txt`、`PINYIN-CC-BY-4.0.txt`、`PINYIN-LICENSE-SCOPE.md`、`PINYIN-UPSTREAM-NOTICE.md`、`THUOCL-MIT.txt`，复用读音资源的署名与 MIT 许可也保留；均可从设置“第三方数据与许可”查看。不暗示原作者认可本项目。
+
 ## Unicode emoji / CLDR
 
 - Emoji 16.0：https://www.unicode.org/Public/emoji/16.0/emoji-test.txt

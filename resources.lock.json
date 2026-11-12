@@ -6,7 +6,9 @@
     "hermitdave/FrequencyWords": "525f9b560de45753a5ea01069454e72e9aa541c6",
     "riku-ri/wubi-kb": "c65590f6a524fa7cb9459d2095be87d22bd839fc",
     "mozillazg/pinyin-data": "fe29ad32bdf352b31a02b9936e537f575432e9a6",
-    "mozillazg/phrase-pinyin-data": "4afa3226ce53c9138b939e83c3bb294dbe0da511"
+    "mozillazg/phrase-pinyin-data": "4afa3226ce53c9138b939e83c3bb294dbe0da511",
+    "amzxyz/rime-wanxiang-data": "78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c",
+    "thunlp/THUOCL": "a30ce79d895d01ab5132a5c74c29703ff7efb4cc"
   },
   "sources": {
     "wubi86.dict.yaml": {
@@ -112,6 +114,40 @@
     "pronunciation/phrase-pinyin-data/pinyin.txt": {
       "url": "https://raw.githubusercontent.com/mozillazg/phrase-pinyin-data/4afa3226ce53c9138b939e83c3bb294dbe0da511/pinyin.txt",
       "sha256": "5d4d86b1337bb2fca95bc5135564a821bfdb40597481ee3e3871bf52d4668622"
+    },
+    "pinyin/wanxiang/LICENSE": {
+      "url": "https://raw.githubusercontent.com/amzxyz/rime-wanxiang-data/78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c/LICENSE",
+      "sha256": "9e5f1b3c610b9c2da5c313bf81d577a7d1acec686bdb0384edefa6df0f90cd94"
+    },
+    "pinyin/wanxiang/LICENSE-SCOPE.md": {
+      "url": "https://raw.githubusercontent.com/amzxyz/rime-wanxiang-data/78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c/LICENSE-SCOPE.md",
+      "sha256": "41ba4ac41b6a28a117c172dd22fc8cf31ff3902f79737cc22e22b9412af624f4"
+    },
+    "pinyin/wanxiang/NOTICE.md": {
+      "url": "https://raw.githubusercontent.com/amzxyz/rime-wanxiang-data/78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c/NOTICE.md",
+      "sha256": "6c624b06a54d95ad2a33a3200481107f9f8d029dd3e7a224988653daa04bca13"
+    },
+    "pinyin/wanxiang/zi.dict.yaml": {
+      "url": "https://raw.githubusercontent.com/amzxyz/rime-wanxiang-data/78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c/dicts/zi.dict.yaml",
+      "sha256": "a600b8e476b8173de59059989029c0f0ab30c9a13715a73be2ed95ec6e69c8fc"
+    },
+    "pinyin/wanxiang/jichu.dict.yaml.gz": {
+      "url": "https://raw.githubusercontent.com/amzxyz/rime-wanxiang-data/78aff0746503c0b9ab7f0a60e1cc8a7e38247c9c/dicts/jichu.dict.yaml",
+      "sha256": "06d461e3b910ab13a298c916fdb76411ea931174a37caaa4f4b2e059e3d82254",
+      "compression": "gzip",
+      "original_sha256": "981beab95df40caf94c350278851cae03984220e9e813fb4f971d01f5c5aa372"
+    },
+    "pinyin/thuocl/LICENSE": {
+      "url": "https://raw.githubusercontent.com/thunlp/THUOCL/a30ce79d895d01ab5132a5c74c29703ff7efb4cc/LICENSE",
+      "sha256": "db4b8cca414db4cf487b933d07a0514f77caf44f9f3d392f2bc9d7ba0d511c58"
+    },
+    "pinyin/thuocl/README.md": {
+      "url": "https://raw.githubusercontent.com/thunlp/THUOCL/a30ce79d895d01ab5132a5c74c29703ff7efb4cc/README.md",
+      "sha256": "388f9d0351d511bcd2a5ecf714b762d822aabc375ece710aae98687eb0d5bcc3"
+    },
+    "pinyin/thuocl/THUOCL_IT.txt": {
+      "url": "https://raw.githubusercontent.com/thunlp/THUOCL/a30ce79d895d01ab5132a5c74c29703ff7efb4cc/data/THUOCL_IT.txt",
+      "sha256": "e8cd42c9f5559735fa3bfb91515cbe051f991efd4a803038a1d5c0da85af3526"
     }
   },
   "wubi_root_font": {
