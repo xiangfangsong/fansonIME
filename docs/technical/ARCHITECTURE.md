@@ -1,5 +1,7 @@
 # 架构与运行时
 
+0.5.1 新增 `PersonalBackup`/`PersonalBackupJson` 和设置页 `BackupController`。文件 I/O 使用独立后台队列，导入与词频快照沿用共享磁盘队列；无新模块、依赖、权限、schema 或宿主输入协议。词频还原提升代数并短暂拒绝反馈，事务后更新模型，不持模型锁做 I/O；见 [个人备份](PERSONAL_BACKUP.md)。
+
 基线与维护规则见 [技术文档入口](README.md)。本项目只有一个 Gradle 模块 `:app`，使用 Kotlin 与 Android 原生 View，按包划分职责。当前没有 Compose、AndroidX、协程、Room、DataStore、JNI 或完整 Rime 引擎；应用运行时数据均在本机。
 
 ## 组件与依赖

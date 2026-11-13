@@ -1,5 +1,7 @@
 # 界面与面板
 
+0.5.1 设置页“隐私与数据”增加 JSON 导入/导出，独立 `BackupController` 管四类复选框、系统文件选择器和后台反馈。缺失类别禁用，空类别可选，未选内容保留；导入成功重建设置页。详见 [个人备份](PERSONAL_BACKUP.md)。
+
 0.5.0：正式拼音复用中文标点、简繁、候选和辅助面板；五笔临时拼音保持五笔键帽与空格语言标签，Z 显示选中深色图标。Z 长按独立于字根开关，临时 L 长按作为音节分隔符；搜索按实际引擎路由。完整状态规则见 [拼音说明](PINYIN_INPUT.md)。
 
 基线见 [入口](README.md)。当前界面通过原生 `LinearLayout/GridLayout/ScrollView/Button` 程序化创建。大部分布局在服务内构建，不采用 XML 键盘、Compose 或 RecyclerView。

@@ -28,11 +28,14 @@ class MainActivity : Activity() {
     private lateinit var ui: Ui
     private lateinit var page: LinearLayout
     private lateinit var status: TextView
+    private lateinit var backup: BackupController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = LocalStore(this)
         buildPage()
+        backup = lastNonConfigurationInstance as? BackupController ?: BackupController()
+        backup.attach(this)
     }
 
     private fun buildPage() {
@@ -144,6 +147,11 @@ class MainActivity : Activity() {
         ui.addWeighted(phraseButtons, ui.button("管理短语") { managePhrases() })
         page.addView(phraseButtons)
         section("隐私与数据")
+        val backupButtons = ui.row()
+        ui.addWeighted(backupButtons, ui.button("导出 JSON 备份") { backup.export() })
+        ui.addWeighted(backupButtons, ui.button("导入 JSON 备份") { backup.import() })
+        page.addView(backupButtons)
+        page.addView(ui.text("通过系统文件选择器备份或还原，可分别选择短语、emoji 使用记录、五笔词频和设置，无需存储权限。", 13f, ui.palette.muted))
         page.addView(ui.text("安装包无网络权限；无账号、广告、统计或云词库，不保存整段输入历史。五笔默认在本机学习候选使用习惯，最多保存两万条衰减词频，收起键盘后批量保存；密码、禁止个性化学习的输入框和表情搜索不学习。另保存 emoji 使用次数与最近顺序，以及最近 10 项普通文本剪贴板历史。所有个人数据均排除系统备份。", 15f))
         page.addView(ui.text("输入法作为系统默认输入法且服务运行时记录后续复制内容，标记为敏感的内容不存入历史。剪贴板「一键清空」同时清除系统当前内容和本输入法历史，其他应用的历史需分别管理。", 13f, ui.palette.muted))
         clearButton("清空自定义短语", "删除全部手动短语及随之失效的学习记录；其他五笔词频、emoji 次数、设置和剪贴板保留。", "已清空自定义短语") { it.clearPhrases() }
@@ -261,5 +269,12 @@ class MainActivity : Activity() {
     }
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
     override fun onResume() { super.onResume(); if (::status.isInitialized) refreshStatus() }
-    override fun onDestroy() { store.close(); super.onDestroy() }
+    fun refreshAfterImport() { buildPage() }
+    override fun onRetainNonConfigurationInstance(): Any = backup
+    @Deprecated("Platform activity result callback")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        backup.result(requestCode, resultCode, data)
+    }
+    override fun onDestroy() { backup.detach(this); store.close(); super.onDestroy() }
 }

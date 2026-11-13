@@ -1,5 +1,7 @@
 # 开发与验证
 
+0.5.1 的 `BackupFrequencyTest` 覆盖快照/恢复/代数；`PersonalBackupChecks` 使用合成 JSON 与独立 SQLite fixture 验证分类、格式、事务和界面。专项执行 `tools/test_emulator.ps1 -Serial emulator-5580 -Focus backup`；完整回归也包含备份检查。系统选择器真实打开与返回、测试拦截返回 URI 的区别，以及本轮实际命令见 [0.5.1](../validation/VALIDATION-0.5.1.md)。规格见 [个人备份](PERSONAL_BACKUP.md)。
+
 0.5.0 新增 `PinyinEngineTest`（合成词典的拼音、分隔符、清码、无匹配、回车、简繁）与仪器测试 `checkPinyinUi`（实际离线数据、Z 真实触摸与队列屏障、生命周期、搜索、偏好、字根及主题）。可用 `tools/test_emulator.ps1 -Serial emulator-5580 -Focus pinyin` 专项验证；完整回归省略 Focus。资源脚本增加拼音数据库、压缩源原始哈希及许可检查，离线重建 `python tools/prepare_pinyin_data.py`；当次结果见 [0.5.0](../validation/VALIDATION-0.5.0.md)。
 
 基线见 [入口](README.md)。本文描述可重复使用的开发流程；当前开发版本结果见 [0.5.0 验证记录](../validation/VALIDATION-0.5.0.md)，此前 0.4.2 见 [历史记录](../validation/VALIDATION-0.4.2.md)，已验收与历史结果见 [0.3.2 验证记录](../validation/VALIDATION-0.3.2.md)、[0.3.1 验证记录](../validation/VALIDATION-0.3.1.md)，不能据此声称某次新改动也已通过。

@@ -55,6 +55,18 @@ class WubiFrequencyStore private constructor(private val app: Application) {
         model.clear()
     }
     fun clearEmojiUsage() { store.clearEmojiUsage() }
+    /** Called on the shared disk queue, like explicit clear/delete operations. */
+    fun personalBackup(sections: Set<BackupSection>): PersonalBackup = store.personalBackup(
+        sections, if (BackupSection.FREQUENCY in sections) model.snapshot(System.currentTimeMillis()) else emptyList()
+    )
+    fun importPersonalBackup(data: PersonalBackup) {
+        PersonalBackupJson.validate(data)
+        if (data.wubiFrequency == null) { store.importPersonalBackup(data); return }
+        model.beginRestore()
+        var committed = false
+        try { store.importPersonalBackup(data); committed = true }
+        finally { model.finishRestore(data.wubiFrequency.takeIf { committed }, System.currentTimeMillis()) }
+    }
     fun removePhrase(code: String, text: String) { removePhrases(listOf(code to text)) }
     fun clearPhrases() { removePhrases(store.phrases().map { it.code to it.text }) }
     private fun removePhrases(phrases: List<Pair<String, String>>) {

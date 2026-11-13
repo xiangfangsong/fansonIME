@@ -6,4 +6,6 @@
     <string name="haptic_strength_value">振动强度：%1$d%%</string>
     <string name="haptic_strength_muted">振动强度：%1$d%%（不振动）</string>
     <string name="haptic_strength_percent">%1$d%%</string>
+    <string name="backup_category_missing">%1$s（文件未包含）</string>
+    <string name="backup_category_count">%1$s（%2$d 项）</string>
 </resources>

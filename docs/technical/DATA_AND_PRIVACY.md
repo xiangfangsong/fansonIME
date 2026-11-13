@@ -1,5 +1,7 @@
 # 数据与隐私
 
+0.5.1 新增用户主动选择的四类 JSON 文件备份，不包含剪贴板，系统备份排除不变，无 schema 迁移、新权限或依赖。缺失/空类别、设置白名单和合并/覆盖规则见 [个人备份](PERSONAL_BACKUP.md)。
+
 0.5.0 增加只读 `pinyin.db`，没有个人库迁移、拼音学习、权限或新依赖；临时拼音标志只存内存。来源版本、CC BY 4.0/MIT 边界、数据库结构及离线重建见 [拼音数据说明](PINYIN_INPUT.md#数据索引和重建)，APK 内保留署名、许可及修改说明。五笔原始词库和哈希不改。
 
 基线见 [入口](README.md)。数据实现主要位于 [`LocalStore.kt`](../../app/src/main/java/com/fanson/ime/data/LocalStore.kt)、[`PronunciationRepository.kt`](../../app/src/main/java/com/fanson/ime/data/PronunciationRepository.kt) 与 [`tools/`](../../tools)。
@@ -88,7 +90,7 @@ PRAGMA user_version=1;
 
 | key | 默认值 | 取值与应用时机 |
 | --- | --- | --- |
-| `default_language` | `wubi86` | `english / wubi86 / korean`；设置中的默认语言；修改时与当前首选、回切目标在同一事务内保存；未知值回退五笔 |
+| `default_language` | `wubi86` | `english / wubi86 / pinyin / korean`；设置中的默认语言；修改时与当前首选、回切目标在同一事务内保存；未知值回退五笔 |
 | `english_auto_capitalize` | `true` | 0.4.2 新增；英语句首大写，非法值回退 true，与拼写独立；无新增表或迁移 |
 | `input_language` | `default_language` | 新输入框读取；主动切换成功或五笔 Shift 进入英文时保存；旧安装保留原值，未知值回退五笔；字段自动覆盖不保存 |
 | `last_non_english_language` | 无记录 | 最近成功主动选择或离开的非英语语言；英语短按优先返回它，缺失/未知/误存英语时用非英语默认语言，默认也是英语则回退五笔；修改默认语言时重设 |
@@ -96,10 +98,10 @@ PRAGMA user_version=1;
 | `wubi_frequency` | `true` | 仅五笔本地衰减排序，未知值回退开启；关闭恢复旧固定查询并停止学习，保留已有记录；隐私和搜索强制禁用 |
 | `auto_unique` | `true` | 四码唯一提交，读取后在 worker 更新 |
 | `fifth_commit` | `true` | 第五码提交，读取后在 worker 更新 |
-| `haptic` | `false` | 三语共用轻震动开关，关闭保留已选强度 |
+| `haptic` | `false` | 四种语言共用轻震动开关，关闭保留已选强度 |
 | `haptic_strength` | `50` | 0–100 的整数字符串；缺失/非法值回退 50，超界夹到范围；0 不振动；触摸松手保存，无障碍/方向键单步保存；下次键盘显示读取并缓存效果。只用现有 preferences 表，无 schema 迁移 |
 | `roots` | `false` | 字根简要提示与长按卡片共用开关 |
-| `number_row` | `true` | 三语共用数字行；开启时数字长按 PC 符号（中文 1/9/0 为全角）；逗号长按冒号，英语/韩语句号长按双引号；关闭时恢复叹号/问号。中文句号长按始终问号，简/繁长按引号独立于此开关；无新键或迁移 |
+| `number_row` | `true` | 四种语言共用数字行；开启时数字长按 PC 符号（中文 1/9/0 为全角）、逗号长按冒号；关闭时逗号长按叹号。句号长按始终为对应语言的问号。英语/韩语的单个直双引号在数字行开启时由逗号左侧功能键长按输入；中文简/繁成对引号独立于此开关；无新键或迁移 |
 | `symbol_auto_return` | `true` | “输入符号后返回键盘”；仅符号网格输入后的自动返回，关闭后连续输入并保留分类；不影响 emoji 或符号页辅助按键 |
 | `theme` | `system` | `system / light / dark`；创建 Palette；设置页更改后重建页面 |
 | `key_height` | `48` | 字符串整数，解析失败回退 48，限制 40～64 dp；横屏实际高度最多 40 dp |

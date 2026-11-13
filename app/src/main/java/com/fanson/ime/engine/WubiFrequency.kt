@@ -46,10 +46,31 @@ class WubiFrequency(private val capacity: Int = 20_000, private val trimTo: Int 
     private val dirty = HashMap<FrequencyKey, FrequencyChange>()
     private var revision = 0L
     private var reachedCapacity = false
+    private var restoring = false
     @get:Synchronized var epoch = 0L
         private set
     @get:Synchronized val size get() = records.size
     @get:Synchronized val pendingSize get() = dirty.size
+
+    /** Explicit backup includes current learning even before the next keyboard hide. */
+    @Synchronized fun snapshot(now: Long): List<FrequencyRecord> = records.values
+        .filter { effective(it, now) > 0.0 }
+        .sortedWith(compareBy({ it.key.inputCode }, { it.key.sourceCode }, { it.key.sourceText }, { it.key.text }))
+
+    /** Disk queue only. Never hold the model monitor across the database transaction. */
+    @Synchronized fun beginRestore() {
+        check(!restoring && inFlight == null)
+        restoring = true
+        epoch++
+    }
+
+    /** null signals a rolled-back transaction: retain all old records and dirty changes. */
+    @Synchronized fun finishRestore(values: List<FrequencyRecord>?, now: Long) {
+        check(restoring)
+        if (values != null) { clear(); load(values, now) }
+        restoring = false
+        epoch++
+    }
 
     @Synchronized fun load(values: List<FrequencyRecord>, now: Long) {
         check(records.isEmpty() && dirty.isEmpty())
@@ -92,7 +113,7 @@ class WubiFrequency(private val capacity: Int = 20_000, private val trimTo: Int 
 
     /** Called only after the corresponding platform commit accepted the candidate. */
     @Synchronized fun record(inputCode: String, candidate: Candidate, expectedEpoch: Long, now: Long): Boolean {
-        if (expectedEpoch != epoch || !validCode(inputCode) || !validCode(candidate.code) ||
+        if (restoring || expectedEpoch != epoch || !validCode(inputCode) || !validCode(candidate.code) ||
             !candidate.code.startsWith(inputCode) || candidate.text.isBlank() || candidate.text.length > 200 ||
             candidate.sourceText.isBlank() || candidate.sourceText.length > 200) return false
         val key = key(inputCode, candidate)

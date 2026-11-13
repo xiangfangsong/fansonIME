@@ -60,6 +60,45 @@ class LocalStore(file: File) : AutoCloseable {
         require(code.matches(Regex("[a-y]{1,4}")) && text.isNotBlank() && text.length <= 200)
         db.execSQL("INSERT OR REPLACE INTO phrases VALUES(?,?)", arrayOf(code, text))
     }
+    /** Snapshot categories from one SQLite transaction; shared model supplies live frequency. */
+    @Synchronized fun personalBackup(sections: Set<BackupSection>, frequency: List<FrequencyRecord>): PersonalBackup {
+        require(sections.isNotEmpty())
+        db.beginTransaction()
+        try {
+            val preferences = if (BackupSection.SETTINGS in sections) BackupPreferences.defaults.mapValues { (key, default) ->
+                val fallback = if (key == "input_language") get("default_language", default) else default
+                get(key, fallback).takeIf { BackupPreferences.valid(key, it) } ?: default
+            } else null
+            val result = PersonalBackup(
+                if (BackupSection.PHRASES in sections) phrases().map { BackupPhrase(it.code, it.text) } else null,
+                if (BackupSection.EMOJI in sections) emojiUsage() else null,
+                frequency.takeIf { BackupSection.FREQUENCY in sections }, preferences
+            )
+            PersonalBackupJson.validate(result)
+            db.setTransactionSuccessful()
+            return result
+        } finally { db.endTransaction() }
+    }
+
+    /** All selected categories succeed or roll back together; schema and clipboard stay intact. */
+    @Synchronized fun importPersonalBackup(data: PersonalBackup) {
+        PersonalBackupJson.validate(data)
+        db.beginTransaction()
+        try {
+            data.phrases?.forEach { addPhrase(it.code, it.text) }
+            data.emojiUsage?.let { rows ->
+                db.delete("emoji_usage", null, null)
+                rows.forEach { (text, value) -> db.execSQL("INSERT INTO emoji_usage VALUES(?,?,?)", arrayOf(text, value.count, value.lastUsed)) }
+            }
+            data.wubiFrequency?.let { rows ->
+                clearFrequency()
+                rows.forEach { row -> db.execSQL("INSERT INTO wubi_frequency VALUES(?,?,?,?,?,?,?)",
+                    arrayOf(row.key.inputCode, row.key.sourceCode, row.key.sourceText, row.key.text, row.score, row.updatedAt, if (row.custom) 1 else 0)) }
+            }
+            data.settings?.let(::putAll)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
     @Synchronized fun removePhrase(code: String, text: String) {
         db.execSQL("DELETE FROM phrases WHERE code=? AND text=?", arrayOf(code, text))
     }

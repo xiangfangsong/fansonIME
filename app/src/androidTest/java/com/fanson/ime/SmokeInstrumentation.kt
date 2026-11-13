@@ -40,13 +40,22 @@ class SmokeInstrumentation : Instrumentation() {
     private val passed = mutableListOf<String>()
     private var shortcutsOnly = false
     private var pinyinOnly = false
+    private var backupOnly = false
     override fun onCreate(arguments: Bundle?) {
         shortcutsOnly = arguments?.getString("focus") == "keyboard_shortcuts"
         pinyinOnly = arguments?.getString("focus") == "pinyin"
+        backupOnly = arguments?.getString("focus") == "backup"
         super.onCreate(arguments); start()
     }
     override fun onStart() {
         try {
+            if (backupOnly || (!shortcutsOnly && !pinyinOnly)) {
+                passed += PersonalBackupChecks.run(this)
+                if (backupOnly) {
+                    finish(Activity.RESULT_OK, Bundle().apply { putString("passed", passed.joinToString(",")); putInt("count", passed.size) })
+                    return
+                }
+            }
             val store = LocalStore(targetContext)
             store.put("input_language", "wubi86")
             store.put("default_language", "wubi86")
